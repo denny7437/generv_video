@@ -47,7 +47,7 @@ pnpm --filter @hermes/api dev
 | `pnpm check:oss` | production-зависимость отсутствует в `docs/oss-registry.md` — правило «open source первым» не выполнено |
 | `pnpm check:queues` | в схеме очереди нет `idempotency_key`, `cost_estimate`, `attempt_policy`, `preset_id`, `prompt_registry_version`, `trace_id` |
 | `pnpm check:openapi` | контракт невалиден (версия линтера пината в `redocly.yaml` и в пайплайне) |
-| branch naming | ветка не по конвенции `task/LIN-<id>-<slug>` — Linear не свяжет её с задачей |
+| branch naming | ветка не по конвенции `task/TEC-<id>-<slug>` — Linear не свяжет её с задачей |
 
 ## Два правила, которые дороже остальных
 
@@ -58,6 +58,20 @@ pnpm --filter @hermes/api dev
 ## Пресеты площадок не подтверждены
 
 Все пресеты в `packages/domain/src/presets.ts` помечены `verified: false`: значения длительности, веса и безопасных полей — рабочие заглушки, а не требования маркетплейсов. Их нужно сверить с официальной документацией площадок и подтвердить. До этого `assertPresetUsable()` не пропускает пресет на боевую выдачу, а API отвечает `409 preset_not_verified` при `NODE_ENV=production`.
+
+## Связь с Linear
+
+Задачи живут в команде **TEC** (организация TechnologiesAI), проект **Generation Video**. Пилотный эпик — `TEC-5`.
+
+Агенты ходят в Linear через обёртку (MCP-сервер требует OAuth, недоступного в headless-сессии):
+
+```bash
+./scripts/linear.sh issue TEC-12
+```
+
+Ключ читается из `LINEAR_API_KEY` или `~/.config/hermes/linear.env` (chmod 600). В репозитории — только имя переменной; значения секретов сюда не попадают.
+
+Конвенция связи: ветка `task/TEC-<n>-<slug>`, коммит `TEC-<n>: <что сделано>`. Ветка вне конвенции роняет job `branch naming` в CI и не связывается с задачей.
 
 ## Документация
 

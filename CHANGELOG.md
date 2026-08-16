@@ -7,7 +7,7 @@
 ### Added
 
 - Скелет монорепо на pnpm workspaces: `apps/api`, `packages/domain`, `packages/budget-guard`, `services/worker-assembly`, `services/worker-qc`.
-- CI: линтер, типы, тесты, линт OpenAPI, проверка обязательных полей в схемах очередей, сверка реестра OSS, проверка имени ветки на конвенцию `task/LIN-<id>-<slug>`.
+- CI: линтер, типы, тесты, линт OpenAPI, проверка обязательных полей в схемах очередей, сверка реестра OSS, проверка имени ветки на конвенцию `task/TEC-<id>-<slug>`.
 - Посевные контракты: `contracts/openapi/api.yaml`, `contracts/db/schema.sql` + миграция `0001_init`, схемы очередей `script`/`render`/`assembly`/`qc`, интерфейс адаптера видео-провайдера.
 - `packages/domain`: пресеты площадок (все `verified: false` до подтверждения по официальным требованиям), ключ идемпотентности платной генерации.
 - `packages/budget-guard`: лимиты на job, заказ и сутки; технический ретрай не тарифицируется повторно.

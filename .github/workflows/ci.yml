@@ -69,11 +69,11 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - name: Ветка обязана называться task/LIN-<id>-<slug>
+      - name: Ветка обязана называться task/TEC-<id>-<slug>
         run: |
           BRANCH="${{ github.head_ref }}"
           if ! echo "$BRANCH" | grep -Eq '^(task/[A-Z]+-[0-9]+-[a-z0-9-]+|develop|release/.+)$'; then
-            echo "Ветка '$BRANCH' не соответствует конвенции task/LIN-<id>-<slug>."
+            echo "Ветка '$BRANCH' не соответствует конвенции task/TEC-<id>-<slug>."
             echo "Интеграция с Linear не свяжет её с задачей — статус не поедет."
             exit 1
           fi
