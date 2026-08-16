@@ -1,0 +1,11 @@
+{
+  "name": "@hermes/queue",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "bullmq": "6.1.2",
+    "ioredis": "5.11.1"
+  }
+}
