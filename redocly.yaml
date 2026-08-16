@@ -1,0 +1,14 @@
+# Конфигурация линтера контрактов. Правила заданы явно, чтобы вердикт CI
+# не менялся вместе с версией инструмента: судья обязан быть стабильным.
+extends:
+  - recommended
+
+rules:
+  # localhost в списке серверов — намеренно: им пользуется локальная разработка.
+  no-server-example.com: off
+  # /health отвечает 200 или 503; осмысленного 4xx у него нет.
+  operation-4xx-response: off
+
+apis:
+  main:
+    root: contracts/openapi/api.yaml

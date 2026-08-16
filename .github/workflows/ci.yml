@@ -1,0 +1,79 @@
+name: CI
+
+# CI — единственный судья контура Hermes. Красный/зелёный не обсуждается:
+# на красном hermes-reviewer не ревьюит, hermes-qa не принимает,
+# а hermes-dev считает итерацию и обновляет отчёт в Linear.
+
+on:
+  push:
+    branches: [main, develop, "task/**"]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: lint · types · tests · oss-registry
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Tests
+        run: pnpm test
+
+      - name: OSS registry sync
+        run: pnpm check:oss
+
+  contracts:
+    name: contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Версия судьи пинуется: плавающий @latest меняет вердикт без изменений в коде.
+      - name: OpenAPI lint
+        run: npx --yes @redocly/cli@2.46.1 lint contracts/openapi/api.yaml
+
+      - name: Queue schemas are valid JSON Schema
+        run: node scripts/check-queue-schemas.mjs
+
+  branch-naming:
+    name: branch naming
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ветка обязана называться task/LIN-<id>-<slug>
+        run: |
+          BRANCH="${{ github.head_ref }}"
+          if ! echo "$BRANCH" | grep -Eq '^(task/[A-Z]+-[0-9]+-[a-z0-9-]+|develop|release/.+)$'; then
+            echo "Ветка '$BRANCH' не соответствует конвенции task/LIN-<id>-<slug>."
+            echo "Интеграция с Linear не свяжет её с задачей — статус не поедет."
+            exit 1
+          fi

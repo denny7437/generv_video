@@ -1,0 +1,37 @@
+Hermes Video Platform
+Copyright (c) 2026 OSMI IT
+
+Этот продукт использует стороннее программное обеспечение с открытым исходным
+кодом. Полный реестр с версиями, режимом использования (reuse/fork) и местом
+применения: docs/oss-registry.md. Синхронность реестра с кодом проверяется в CI
+(pnpm check:oss).
+
+--- Компоненты, входящие в поставку ---
+
+fastify (^5.1.0) — MIT License
+  https://github.com/fastify/fastify
+
+zod (^3.23.8) — MIT License
+  https://github.com/colinhacks/zod
+
+--- Инструменты разработки (в поставку не входят) ---
+
+typescript — Apache License 2.0
+vitest — MIT License
+eslint, @eslint/js, typescript-eslint — MIT License
+tsx — MIT License
+@types/node — MIT License
+
+--- Внешние бинарные зависимости ---
+
+ffmpeg / ffprobe — LGPL-2.1-or-later либо GPL-2.0-or-later в зависимости
+  от конфигурации сборки. Требует отдельного решения (ADR) до первого релиза:
+  обязательства различаются для SaaS-модели и для поставки on-prem.
+  https://ffmpeg.org/legal.html
+
+--- Правило пополнения ---
+
+Новая зависимость или форк добавляются в этот файл и в docs/oss-registry.md
+в том же PR, где появляются. Отсутствие записи — блокирующее замечание на ревью.
+Лицензии AGPL / SSPL / BUSL / CC-BY-NC и «non-commercial» условия на веса
+моделей агентом не принимаются: решение принимает человек.

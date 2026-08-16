@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hermes.local/contracts/queues/script.json",
+  "title": "script.job",
+  "description": "Бриф → структурированный сценарий. Фаза E4.",
+  "type": "object",
+  "required": [
+    "idempotency_key",
+    "trace_id",
+    "order_id",
+    "preset_id",
+    "prompt_registry_version",
+    "cost_estimate",
+    "attempt_policy",
+    "brief"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "idempotency_key": { "type": "string", "minLength": 8 },
+    "trace_id": { "type": "string", "minLength": 1 },
+    "order_id": { "type": "string", "minLength": 1 },
+    "preset_id": { "type": "string", "minLength": 1 },
+    "prompt_registry_version": { "type": "string", "minLength": 1 },
+    "cost_estimate": { "$ref": "#/$defs/money" },
+    "attempt_policy": { "$ref": "#/$defs/attemptPolicy" },
+    "brief": {
+      "type": "object",
+      "required": ["marketplace", "product_title", "language", "voiceover", "scenes"],
+      "additionalProperties": false,
+      "properties": {
+        "marketplace": { "type": "string", "enum": ["wb", "ozon", "ym"] },
+        "product_title": { "type": "string", "maxLength": 300 },
+        "language": { "type": "string", "enum": ["ru", "en"] },
+        "voiceover": { "type": "boolean" },
+        "scenes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "required": ["index", "duration_ms", "source_refs"],
+            "additionalProperties": false,
+            "properties": {
+              "index": { "type": "integer", "minimum": 0 },
+              "duration_ms": { "type": "integer", "minimum": 500, "maximum": 30000 },
+              "source_refs": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+              "caption": { "type": "string", "maxLength": 200 }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "money": {
+      "type": "object",
+      "required": ["amount_minor", "currency"],
+      "additionalProperties": false,
+      "properties": {
+        "amount_minor": { "type": "integer", "minimum": 0 },
+        "currency": { "type": "string", "enum": ["RUB", "USD"] }
+      }
+    },
+    "attemptPolicy": {
+      "type": "object",
+      "required": ["max_technical_retries", "billable"],
+      "additionalProperties": false,
+      "properties": {
+        "max_technical_retries": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "billable": { "type": "boolean" }
+      }
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "@hermes/worker-qc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@hermes/domain": "workspace:*"
+  }
+}

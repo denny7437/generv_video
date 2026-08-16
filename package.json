@@ -1,0 +1,30 @@
+{
+  "name": "hermes-video-platform",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.6.4",
+  "engines": {
+    "node": ">=20.10"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check:oss": "node scripts/check-oss-registry.mjs",
+    "check:queues": "node scripts/check-queue-schemas.mjs",
+    "check:openapi": "npx --yes @redocly/cli@2.46.1 lint contracts/openapi/api.yaml",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm check:oss && pnpm check:queues",
+    "dev:infra": "docker compose -f infra/docker-compose.yml up -d",
+    "dev:infra:down": "docker compose -f infra/docker-compose.yml down"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.13.0",
+    "@types/node": "^20.17.0",
+    "eslint": "^9.13.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.11.0",
+    "vitest": "^2.1.0"
+  }
+}

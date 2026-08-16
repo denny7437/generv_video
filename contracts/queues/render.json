@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hermes.local/contracts/queues/render.json",
+  "title": "render.job",
+  "description": "Генерация клипа сцены провайдером или локальной моделью. Фаза E5. Самая дорогая очередь контура: отдельный лимит параллелизма и отдельный алерт на застрявшую job.",
+  "type": "object",
+  "required": [
+    "idempotency_key",
+    "trace_id",
+    "order_id",
+    "preset_id",
+    "prompt_registry_version",
+    "cost_estimate",
+    "attempt_policy",
+    "scene"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "idempotency_key": { "type": "string", "minLength": 8 },
+    "trace_id": { "type": "string", "minLength": 1 },
+    "order_id": { "type": "string", "minLength": 1 },
+    "preset_id": { "type": "string", "minLength": 1 },
+    "prompt_registry_version": { "type": "string", "minLength": 1 },
+    "cost_estimate": { "$ref": "#/$defs/money" },
+    "attempt_policy": { "$ref": "#/$defs/attemptPolicy" },
+    "provider": {
+      "type": "string",
+      "description": "Имя адаптера. 'mock' обязателен для тестов и CI: живые ключи в тестах не используются.",
+      "default": "mock"
+    },
+    "scene": {
+      "type": "object",
+      "required": ["index", "duration_ms", "source_refs"],
+      "additionalProperties": false,
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "duration_ms": { "type": "integer", "minimum": 500, "maximum": 30000 },
+        "source_refs": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "prompt_id": { "type": "string" },
+        "caption": { "type": "string", "maxLength": 200 }
+      }
+    }
+  },
+  "$defs": {
+    "money": {
+      "type": "object",
+      "required": ["amount_minor", "currency"],
+      "additionalProperties": false,
+      "properties": {
+        "amount_minor": { "type": "integer", "minimum": 0 },
+        "currency": { "type": "string", "enum": ["RUB", "USD"] }
+      }
+    },
+    "attemptPolicy": {
+      "type": "object",
+      "required": ["max_technical_retries", "billable"],
+      "additionalProperties": false,
+      "properties": {
+        "max_technical_retries": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "billable": { "type": "boolean" }
+      }
+    }
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hermes.local/contracts/queues/qc.json",
+  "title": "qc.job",
+  "description": "Автоматический контроль качества перед выдачей. Фаза E7. Провал любого пункта переводит артефакт в qc_failed, а не выдаёт «как есть».",
+  "type": "object",
+  "required": [
+    "idempotency_key",
+    "trace_id",
+    "order_id",
+    "preset_id",
+    "prompt_registry_version",
+    "cost_estimate",
+    "attempt_policy",
+    "artifact_ref"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "idempotency_key": { "type": "string", "minLength": 8 },
+    "trace_id": { "type": "string", "minLength": 1 },
+    "order_id": { "type": "string", "minLength": 1 },
+    "preset_id": { "type": "string", "minLength": 1 },
+    "prompt_registry_version": { "type": "string", "minLength": 1 },
+    "cost_estimate": { "$ref": "#/$defs/money" },
+    "attempt_policy": { "$ref": "#/$defs/attemptPolicy" },
+    "artifact_ref": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Ключ S3 собранного ролика."
+    },
+    "expect_audio": {
+      "type": "boolean",
+      "default": true,
+      "description": "false — немой ролик допустим (проверки звука не применяются)."
+    }
+  },
+  "$defs": {
+    "money": {
+      "type": "object",
+      "required": ["amount_minor", "currency"],
+      "additionalProperties": false,
+      "properties": {
+        "amount_minor": { "type": "integer", "minimum": 0 },
+        "currency": { "type": "string", "enum": ["RUB", "USD"] }
+      }
+    },
+    "attemptPolicy": {
+      "type": "object",
+      "required": ["max_technical_retries", "billable"],
+      "additionalProperties": false,
+      "properties": {
+        "max_technical_retries": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "billable": { "type": "boolean" }
+      }
+    }
+  }
+}

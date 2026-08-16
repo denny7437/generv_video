@@ -1,0 +1,275 @@
+openapi: 3.1.0
+info:
+  title: Hermes Video Platform API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    url: https://osmi-it.ru
+  description: |
+    Публичный HTTP-интерфейс площадки генерации видео для маркетплейсов.
+    Источник истины: этот файл. Реализация обязана ему соответствовать
+    (apps/api). Меняет только hermes-architect по задаче с меткой needs-contract.
+
+    Долгие операции асинхронные: рендер возвращает 202 и job_id.
+    Синхронного рендера в контракте не существует.
+servers:
+  - url: http://localhost:3000
+    description: локальная разработка
+  - url: https://api.staging.hermes.internal
+    description: staging (адрес заполняется при настройке пайплайна)
+
+# Все операции требуют токена, кроме явно помеченных security: [].
+# ВНИМАНИЕ: проверка токена в apps/api ещё не реализована — это задача фазы E1.
+# Контракт идёт впереди кода намеренно (см. docs/adr/0001).
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Проверка живости сервиса
+      operationId: getHealth
+      security: []
+      responses:
+        "200":
+          description: Сервис жив
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+        "503":
+          description: Сервис не готов обслуживать запросы
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /orders:
+    post:
+      summary: Создать заказ на генерацию ролика
+      operationId: createOrder
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: |
+            Ключ повтора. Повторный запрос с тем же ключом и тем же телом
+            возвращает 200 и ту же job, а не создаёт вторую платную генерацию.
+          schema:
+            type: string
+            minLength: 8
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderRequest"
+      responses:
+        "202":
+          description: Заказ принят, job поставлена в очередь
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobRef"
+        "200":
+          description: Повтор запроса с тем же ключом — возвращается ранее созданная job
+          headers:
+            Idempotent-Replay:
+              schema:
+                type: string
+                enum: ["true"]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobRef"
+        "400":
+          description: Ошибка валидации, неизвестный пресет, превышена длительность
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "402":
+          description: Бюджет исчерпан (решение budget-guard)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BudgetError"
+        "409":
+          description: Пресет площадки не подтверждён и не может использоваться на боевой выдаче
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /jobs/{id}:
+    get:
+      summary: Статус job
+      operationId: getJob
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Текущее состояние job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "404":
+          description: Job не найдена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Токен кабинета селлера. Значение секрета в логи и отчёты не попадает.
+
+  schemas:
+    Marketplace:
+      type: string
+      enum: [wb, ozon, ym]
+
+    Scene:
+      type: object
+      required: [index, durationMs, sourceRefs]
+      additionalProperties: false
+      properties:
+        index:
+          type: integer
+          minimum: 0
+        durationMs:
+          type: integer
+          minimum: 500
+          maximum: 30000
+        sourceRefs:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            description: Ключ объекта в S3
+        caption:
+          type: string
+          maxLength: 200
+
+    CreateOrderRequest:
+      type: object
+      required: [marketplace, presetId, productTitle, scenes]
+      additionalProperties: false
+      properties:
+        marketplace:
+          $ref: "#/components/schemas/Marketplace"
+        presetId:
+          type: string
+          description: Идентификатор пресета площадки (packages/domain/src/presets.ts)
+        productTitle:
+          type: string
+          maxLength: 300
+        language:
+          type: string
+          enum: [ru, en]
+          default: ru
+        voiceover:
+          type: boolean
+          default: false
+        scenes:
+          type: array
+          minItems: 1
+          maxItems: 12
+          items:
+            $ref: "#/components/schemas/Scene"
+
+    JobStatus:
+      type: string
+      enum: [queued, running, qc_failed, ready, failed]
+
+    JobRef:
+      type: object
+      required: [jobId, orderId, status]
+      properties:
+        jobId:
+          type: string
+        orderId:
+          type: string
+        status:
+          $ref: "#/components/schemas/JobStatus"
+
+    Money:
+      type: object
+      required: [amountMinor, currency]
+      properties:
+        amountMinor:
+          type: integer
+          minimum: 0
+          description: Целое в минимальных единицах. Float запрещён.
+        currency:
+          type: string
+          enum: [RUB, USD]
+
+    Job:
+      allOf:
+        - $ref: "#/components/schemas/JobRef"
+        - type: object
+          required: [presetId, promptRegistryVersion, costEstimate]
+          properties:
+            presetId:
+              type: string
+            promptRegistryVersion:
+              type: string
+              description: Без неё результат генерации невоспроизводим.
+            costEstimate:
+              $ref: "#/components/schemas/Money"
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        issues:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              message:
+                type: string
+
+    BudgetError:
+      type: object
+      required: [error, reason]
+      properties:
+        error:
+          type: string
+          enum: [budget_exceeded]
+        reason:
+          type: string
+          enum:
+            [
+              currency_mismatch,
+              negative_estimate,
+              per_job_limit,
+              per_order_limit,
+              per_day_limit,
+            ]
+        limitMinor:
+          type: integer
+        wouldBeMinor:
+          type: integer

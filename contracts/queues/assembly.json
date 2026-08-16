@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hermes.local/contracts/queues/assembly.json",
+  "title": "assembly.job",
+  "description": "Сборка ffmpeg: монтаж клипов, титры, озвучка. Фаза E6.",
+  "type": "object",
+  "required": [
+    "idempotency_key",
+    "trace_id",
+    "order_id",
+    "preset_id",
+    "prompt_registry_version",
+    "cost_estimate",
+    "attempt_policy",
+    "clip_refs"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "idempotency_key": { "type": "string", "minLength": 8 },
+    "trace_id": { "type": "string", "minLength": 1 },
+    "order_id": { "type": "string", "minLength": 1 },
+    "preset_id": { "type": "string", "minLength": 1 },
+    "prompt_registry_version": { "type": "string", "minLength": 1 },
+    "cost_estimate": { "$ref": "#/$defs/money" },
+    "attempt_policy": { "$ref": "#/$defs/attemptPolicy" },
+    "clip_refs": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Ключи S3 клипов в порядке монтажа.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "audio_ref": {
+      "type": ["string", "null"],
+      "description": "Ключ S3 озвучки или музыки. null — немой ролик."
+    },
+    "subtitles_ref": {
+      "type": ["string", "null"],
+      "description": "Ключ S3 ASS-файла титров."
+    },
+    "ffmpeg_timeout_ms": {
+      "type": "integer",
+      "minimum": 1000,
+      "maximum": 3600000,
+      "description": "Таймаут обязателен: зависший ffmpeg держит воркер."
+    }
+  },
+  "$defs": {
+    "money": {
+      "type": "object",
+      "required": ["amount_minor", "currency"],
+      "additionalProperties": false,
+      "properties": {
+        "amount_minor": { "type": "integer", "minimum": 0 },
+        "currency": { "type": "string", "enum": ["RUB", "USD"] }
+      }
+    },
+    "attemptPolicy": {
+      "type": "object",
+      "required": ["max_technical_retries", "billable"],
+      "additionalProperties": false,
+      "properties": {
+        "max_technical_retries": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "billable": { "type": "boolean" }
+      }
+    }
+  }
+}
