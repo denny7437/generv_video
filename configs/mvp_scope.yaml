@@ -1,0 +1,25 @@
+# mvp_scope.yaml — продуктовые решения человека по разделу 9 записки.
+# Владелец: A-10 (hermes-product). Решения принимает ТОЛЬКО Денис; агенты читают.
+version: 1.0
+decided_by: "Денис Нагаев"
+decided_at: "2026-08-17"
+
+categories:                       # вопрос 1 — РЕШЕНО
+  - {id: clothing,     name: "Одежда",     ozon_cover_aspect: "3:4"}
+  - {id: home_garden,  name: "Дом и сад",  ozon_cover_aspect: "3:4"}
+  - {id: electronics,  name: "Электроника", ozon_cover_aspect: "1:1"}   # квадратный дериват обязателен
+
+platform_priority:                # вопрос 2 — РЕШЕНО
+  first: ozon                     # мягче санкции: отклонение → вкладка «Ошибки», карточка не блокируется
+  second: wildberries             # подключается со строгим режимом валидатора (санкция — блокировка карточки)
+
+confirmed_defaults:               # вопросы 3, 4, 5 — РЕШЕНО пакетом
+  duration_8s: true               # значение живёт в master_format.yaml → generation.duration_sec
+  self_host_gate: true            # формулировка записки §3.5: замер в фазе 2, порог ≤ 0.7 × цены API при утилизации ≥ 60 %
+  opex_phase2_cap: true           # значение живёт в finance/opex.yaml → phase2_cap_rub
+
+open_questions:                   # остаются в TEC-35
+  q6_pricing: provisional         # тарифная сетка 990/2490/6900 — не подтверждена
+  q7_data_source: service_selection  # решение Дениса: источник — сервис аналитики маркетплейсов;
+                                     # hermes-product выбирает ЛУЧШИЙ ПО ДАННЫМ (сравнение — задача в эпике)
+  q8_config_format: de_facto_yaml # YAML уже применён в configs/; подтвердить явно
