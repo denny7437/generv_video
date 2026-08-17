@@ -18,8 +18,11 @@ confirmed_defaults:               # вопросы 3, 4, 5 — РЕШЕНО па
   self_host_gate: true            # формулировка записки §3.5: замер в фазе 2, порог ≤ 0.7 × цены API при утилизации ≥ 60 %
   opex_phase2_cap: true           # значение живёт в finance/opex.yaml → phase2_cap_rub
 
-open_questions:                   # остаются в TEC-35
+open_questions:                   # вопросы раздела 9 записки; q7 закрыт рекомендацией в TEC-36 (решение/оплата — Денис)
   q6_pricing: provisional         # тарифная сетка 990/2490/6900 — не подтверждена
-  q7_data_source: service_selection  # решение Дениса: источник — сервис аналитики маркетплейсов;
-                                     # hermes-product выбирает ЛУЧШИЙ ПО ДАННЫМ (сравнение — задача в эпике)
+  q7_data_source:
+    service: mpstats              # РЕКОМЕНДАЦИЯ hermes-product (TEC-36): MPStats — лучший по данным.
+                                  #   Сравнение: docs/product/{product} {research} сервисы аналитики маркетплейсов – 2026-08-17.md
+    status: recommendation        # решение и оплата — Денис; до оплаты цена/лимиты выгрузки provisional
+    golden_set: second_source     # аналитика закрывает playbook; исходники golden set — второй источник, за человеком (§7.6)
   q8_config_format: de_facto_yaml # YAML уже применён в configs/; подтвердить явно
