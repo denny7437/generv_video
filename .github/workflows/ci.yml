@@ -64,6 +64,12 @@ jobs:
       - name: Queue schemas are valid JSON Schema
         run: node scripts/check-queue-schemas.mjs
 
+      # Конфиги Нейровидео: «значение живёт ровно в одном файле», запрет sora-2.
+      - name: Project configs
+        run: |
+          pip install --quiet pyyaml
+          python3 scripts/check_configs.py
+
   branch-naming:
     name: branch naming
     if: github.event_name == 'pull_request'

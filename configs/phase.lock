@@ -1,0 +1,7 @@
+# phase.lock — текущая фаза проекта. Меняет ТОЛЬКО A-00 (hermes-lead)
+# при наличии машинных доказательств от A-36 (hermes-qa) и письменного подтверждения человека.
+# Гейты G1–G4 — записка §6.
+phase: 1
+changed_by: null
+evidence: null
+human_approved_at: null
