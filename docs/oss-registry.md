@@ -10,6 +10,7 @@
 |---|---|---|---|---|---|---|---|
 | HTTP-сервер | `fastify` | ^5.1.0 | MIT | reuse | `apps/api` | скелет | 2026-08-17 |
 | Валидация входа | `zod` | ^3.23.8 | MIT | reuse | `apps/api` | скелет | 2026-08-17 |
+| PostgreSQL-драйвер | `pg` | ^8.23.0 | MIT | reuse | `apps/api` | TEC-11 | 2026-08-17 |
 
 ## Инструменты разработки
 
@@ -22,6 +23,7 @@
 | `eslint`, `typescript-eslint`, `@eslint/js` | MIT | линтер |
 | `tsx` | MIT | запуск TypeScript в dev |
 | `@types/node` | MIT | типы Node.js |
+| `@types/pg` | MIT | типы PostgreSQL-драйвера |
 
 ## Внешние бинарные зависимости
 
@@ -35,7 +37,8 @@
 
 | Что искали | Кандидаты | Почему отказались | Задача | Дата |
 |---|---|---|---|---|
-| — | — | — | — | — |
+| Миграционный инструмент | node-pg-migrate, umzug, knex | Миграции уже plain `.sql` (contracts/db/migrations), compose применяет их через docker-entrypoint-initdb.d; forward-only раннер ~40 строк — зависимость ради малого | TEC-11 | 2026-08-17 |
+| Query-builder | kysely, knex | 4 SELECT + 3 INSERT, схема уже SQL; чистый SQL через `pg` яснее, конвенция проекта SQL-first | TEC-11 | 2026-08-17 |
 
 ## Что ещё предстоит выбрать
 
@@ -47,4 +50,3 @@
 - TTS для озвучки;
 - фронтенд-стек и компонентная база;
 - Playwright и оснастка e2e;
-- миграционный инструмент.

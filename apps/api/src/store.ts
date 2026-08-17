@@ -1,10 +1,13 @@
 import type { Brief, Money } from '@hermes/domain';
 
 /**
- * Хранилище в памяти — временная заглушка на время сборки скелета.
- * Заменяется на PostgreSQL + публикацию в BullMQ отдельной задачей Linear
- * (контракты: contracts/db/schema.sql, contracts/queues/script.json).
- * Границы интерфейса выбраны так, чтобы замена не задела HTTP-слой.
+ * Контракт хранилища HTTP-слоя (`apps/api/src/server.ts`).
+ *
+ * `Store` — синхронный интерфейс, который потребляет HTTP-слой; `createMemoryStore`
+ * остаётся дефолтом для тестов и dev-скелета. PostgreSQL-реализация живёт в
+ * `db/postgres-store.ts` как асинхронный `AsyncStore`: HTTP-слой переедет на неё
+ * вместе с публикацией job в очередь (отдельная задача TEC-12), поэтому `server.ts`
+ * в этой задаче не меняется, а `Store` остаётся прежним.
  */
 
 export type JobStatus = 'queued' | 'running' | 'qc_failed' | 'ready' | 'failed';
@@ -26,6 +29,20 @@ export interface Store {
   getJob(jobId: string): JobRecord | undefined;
   orderSpentMinor(orderId: string): number;
   daySpentMinor(): number;
+}
+
+/**
+ * Асинхронный двойник `Store` — те же операции поверх PostgreSQL.
+ * Сигнатуры повторяют `Store` один-в-один, отличаясь только `Promise<…>`.
+ * Идемпотентность `idempotency_key` гарантируется уникальным индексом БД
+ * (`jobs_idempotency_key_uniq`), а не только проверкой в коде.
+ */
+export interface AsyncStore {
+  findByIdempotencyKey(key: string): Promise<JobRecord | undefined>;
+  createJob(record: JobRecord, brief: Brief): Promise<JobRecord>;
+  getJob(jobId: string): Promise<JobRecord | undefined>;
+  orderSpentMinor(orderId: string): Promise<number>;
+  daySpentMinor(): Promise<number>;
 }
 
 export function createMemoryStore(): Store {
