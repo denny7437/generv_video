@@ -19,6 +19,7 @@ import argparse
 import json
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import urllib.request
@@ -26,6 +27,28 @@ import urllib.request
 REPO = pathlib.Path(__file__).resolve().parent.parent
 ROLES = {"lead", "architect", "dev", "reviewer", "qa", "devops", "writer", "product"}
 PROJECT_ID = "d4c6cf0c-0879-4087-85ed-7d7281a52e2e"  # Generation Video
+
+
+RU2LAT = {
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e", "ж": "zh",
+    "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m", "н": "n", "о": "o",
+    "п": "p", "р": "r", "с": "s", "т": "t", "у": "u", "ф": "f", "х": "h", "ц": "c",
+    "ч": "ch", "ш": "sh", "щ": "sch", "ъ": "", "ы": "y", "ь": "", "э": "e",
+    "ю": "yu", "я": "ya",
+}
+
+
+def branch_name(ident: str, title: str) -> str:
+    """
+    Имя ветки по конвенции контура: task/TEC-<n>-<slug>.
+
+    Без этого worktree получает служебное имя wt/<task-id>, задача не связывается
+    с Linear, а джоба branch naming в CI роняет PR.
+    """
+    slug = "".join(RU2LAT.get(ch, ch) for ch in title.lower())
+    slug = re.sub(r"[^a-z0-9]+", "-", slug).strip("-")
+    slug = "-".join(slug.split("-")[:5])[:40].strip("-") or "task"
+    return f"task/{ident}-{slug}"
 
 
 def load_key() -> str:
@@ -151,7 +174,10 @@ def main() -> None:
             "hermes", "kanban", "--board", args.board, "create", title,
             "--assignee", f'hermes-{issue["role"]}',
             "--body", BODY.format(ident=ident, url=issue["url"], role=issue["role"]),
-            "--workspace", str(REPO),
+            # Отдельный git worktree на задачу: агенты не дерутся за рабочую копию
+            # и за ветки, а брошенная работа не пачкает основной репозиторий.
+            "--workspace", f"worktree:{REPO}",
+            "--branch", branch_name(ident, issue["title"]),
             "--idempotency-key", ident,
             "--max-runtime", "3600",
             "--created-by", "linear-sync",
