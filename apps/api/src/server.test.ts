@@ -11,7 +11,7 @@ const limits = {
 
 const validBody = {
   marketplace: 'wb',
-  presetId: 'wb-vertical-9x16',
+  presetId: 'wb_card',
   productTitle: 'Кроссовки беговые',
   scenes: [
     { index: 0, durationMs: 4000, sourceRefs: ['s3://src/1.jpg'] },
@@ -136,7 +136,7 @@ describe('GET /jobs/:id', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({
       status: 'queued',
-      presetId: 'wb-vertical-9x16',
+      presetId: 'wb_card',
       promptRegistryVersion: '2026.08.1',
     });
   });

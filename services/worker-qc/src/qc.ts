@@ -74,7 +74,10 @@ export const DEFAULT_QC_OPTIONS: QcOptions = {
   avOffsetToleranceMs: 120,
   minCaptionContrast: 3,
   edgeBlackToleranceMs: 120,
-  expectAudio: true,
+  // Мастер-формат в MVP без звука (master_format.audio = none), поэтому
+  // аудио по умолчанию не ожидается. Проверка звука включается только
+  // явным { expectAudio: true }, когда формат его предусматривает.
+  expectAudio: false,
 };
 
 export function evaluateQc(
