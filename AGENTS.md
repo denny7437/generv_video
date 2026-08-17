@@ -22,8 +22,10 @@
 pnpm verify                 # линтер + типы + тесты + реестр OSS + схемы очередей
 pnpm test                   # только тесты
 pnpm dev:infra              # postgres, redis, minio локально
-./scripts/linear.sh issue TEC-6
+hermes-linear issue TEC-6   # доступ к задачам; команда из PATH, в репозитории её нет
 ```
+
+Инструменты контура (Linear, мосты Open WebUI, браузер агентов) живут не здесь, а в паке контура — `$HERMES_VIDEO_PACK/scripts/`. В репозитории только продукт и гейты его CI. Команды `hermes-linear` нет в PATH — эскалация, а не попытка найти скрипт в репозитории.
 
 ## Конвенции
 

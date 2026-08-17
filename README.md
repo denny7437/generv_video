@@ -66,8 +66,10 @@ pnpm --filter @hermes/api dev
 Агенты ходят в Linear через обёртку (MCP-сервер требует OAuth, недоступного в headless-сессии):
 
 ```bash
-./scripts/linear.sh issue TEC-12
+hermes-linear issue TEC-12
 ```
+
+Сама обёртка — часть контура агентов, а не продукта: она живёт в паке (`Hermes видеоплатформа – …/scripts/linear.sh`) и попадает в PATH как `hermes-linear` при установке контура (`install.sh`). В этом репозитории её нет намеренно — здесь только продукт и гейты его CI.
 
 Ключ читается из `LINEAR_API_KEY` или `~/.config/hermes/linear.env` (chmod 600). В репозитории — только имя переменной; значения секретов сюда не попадают.
 
