@@ -2,6 +2,8 @@ node_modules/
 dist/
 .next/
 coverage/
+__pycache__/
+*.pyc
 .env
 .env.local
 *.log
