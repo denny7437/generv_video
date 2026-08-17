@@ -18,8 +18,8 @@ confirmed_defaults:               # вопросы 3, 4, 5 — РЕШЕНО па
   self_host_gate: true            # формулировка записки §3.5: замер в фазе 2, порог ≤ 0.7 × цены API при утилизации ≥ 60 %
   opex_phase2_cap: true           # значение живёт в finance/opex.yaml → phase2_cap_rub
 
-open_questions:                   # остаются в TEC-35
-  q6_pricing: provisional         # тарифная сетка 990/2490/6900 — не подтверждена
-  q7_data_source: service_selection  # решение Дениса: источник — сервис аналитики маркетплейсов;
-                                     # hermes-product выбирает ЛУЧШИЙ ПО ДАННЫМ (сравнение — задача в эпике)
-  q8_config_format: de_facto_yaml # YAML уже применён в configs/; подтвердить явно
+open_questions:                   # все 8 вопросов §9 закрыты — подтверждено Денисом 2026-08-17
+  q6_pricing: confirmed_990       # тарифная сетка 990/2490/6900 подтверждена, старт 990 ₽/мес
+  q7_data_source: confirmed_service_selection  # источник — сервис аналитики маркетплейсов;
+                                               # выбор лучшего по данным — hermes-product (TEC-36)
+  q8_config_format: confirmed_yaml  # формат конфигов YAML подтверждён явно
