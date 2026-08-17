@@ -10,3 +10,4 @@ tmp/
 artifacts/
 test-results/
 playwright-report/
+.worktrees/

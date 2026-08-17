@@ -1,0 +1,56 @@
+# cost_targets.yaml — единственный источник стоимостных допущений.
+# Хардкод любых цен и лимитов в коде и в промптах запрещён.
+# Параметры формата вынесены в master_format.yaml (владелец A-30) и здесь не дублируются.
+# Источник: пояснительная записка «Нейровидео» v1.1 от 17.08.2026, раздел 3.4.
+# Владелец: A-20 (hermes-product). Изменения утверждает только человек.
+version: 1.1
+owner: A-20
+approved_by: null          # заполняется человеком; до этого статус provisional
+approved_at: null
+
+assumptions:               # входные данные модели, не результат работы агентов
+  fx_usd_rub: 80.0                    # пересматривать ежемесячно; отклонение >10 % -> пересчёт A-20
+  arpu_rub_month: 2031.0
+  plan_limits: {start: 8, pro: 25, business: 80}
+  plan_mix:    {start: 0.6, pro: 0.3, business: 0.1}
+  limit_utilization: 0.68             # 0.6 типовой x 0.8 + 1.0 тяжёлый x 0.2
+  videos_per_user_month: 13.8         # = 20.3 лимита x 0.68
+  churn_monthly: 0.12                 # status: provisional, цель 0.09
+  cac_rub: 3000.0                     # status: provisional, цель 2500
+  acquiring_and_tax: 0.095            # 3.5 % эквайринг + 6 % УСН
+  support_rub_month: 120.0
+
+cost:
+  cogs_per_accepted_video_target_rub: 47.0
+  cogs_per_accepted_video_max_rub: 48.0      # ЖЁСТКИЙ ПОТОЛОК, есть запас к цели
+  cogs_alert_threshold_rub: 44.0             # предупреждение в мониторинге
+  other_compute_breakdown_rub:               # в сумме 4.0 руб на принятый ролик
+    source_selection_and_segmentation: {value: 0.8, per: accepted}
+    vlm_validation:                   {value: 1.0, per: attempt}   # x1.6 = 1.6
+    assembly_upscale_encode:          {value: 1.0, per: accepted}
+    cdn_and_storage:                  {value: 0.6, per: accepted}
+
+generation:
+  attempts_per_accepted_target: 1.6
+  attempts_per_accepted_max: 1.8
+  attempts_enforced_from_phase: 2            # до фазы 2 порог не блокирует
+  max_attempts_per_sku: 4                    # выше — отказ с причиной, SKU в отчёт селлеру
+  coverage_min: 0.90                         # доля SKU golden set с принятым роликом
+  premium_share_max: 0.10
+  budget_model_price_usd_per_sec_weighted_max: 0.030   # средневзвешенно по миксу
+  budget_model_price_usd_per_sec_single_max:   0.045   # потолок на отдельный вызов
+  premium_model_price_usd_per_sec_weighted_max: 0.150
+  premium_model_price_usd_per_sec_single_max:   0.200
+  min_budget_providers: 2                    # резервирование обязательно
+  self_host_traffic_share_max: 0.80          # 20 % бюджетного трафика всегда на API
+
+unit_economics:
+  # Пороги производны от оттока и CAC. Проверять формулой, а не константой.
+  contribution_min_formula: "3 * assumptions.cac_rub * assumptions.churn_monthly"
+  contribution_margin_min: 0.50
+  ltv_cac_min: 3.0                           # бизнес-гейт G4, не инженерный
+  cac_payback_months_max: 6.0
+
+forbidden_models:
+  - id: "sora-2"                             # API отключается 24.09.2026
+  - id: "sora-2-pro"
