@@ -130,22 +130,40 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
-  /connections:
+  /connections/{marketplace}:
     post:
-      summary: Подключить кабинет продавца на площадке
-      operationId: createConnection
+      summary: Подключить кабинет продавца на площадке (OAuth или API-ключ)
+      operationId: connectMarketplace
       description: |
-        Регистрирует «подключение кабинета» — сущность, через которую импорт
-        карточки ходит в официальный API площадки (ADR-0003, вариант «а»).
-        credentialRef — имя переменной окружения / ключа секрет-менеджера,
-        НЕ значение секрета. Одно подключение на пару (продавец, площадка).
+        Единая точка входа в авторизацию площадки (ADR-0005). Механизм задаётся
+        полем authMethod в теле и должен поддерживаться площадкой:
+
+        - oauth — OAuth 2.0 Authorization Code flow (RFC 6749) со `state` (CSRF).
+          Поддерживается Ozon. Ответ 200 содержит authorizationUrl — фронтенд
+          редиректит на него браузер селлера; завершение — через callback.
+        - api_key — статический ключ площадки, который селлер вставляет сам.
+          Wildberries (и Ozon по выбору). credentialRef — имя ключа секрет-менеджера,
+          НЕ значение секрета.
+
+        Одно подключение на пару (продавец, площадка). Повторная регистрация при
+        существующем active/pending подключении — 409 (или 200 с Idempotent-Replay
+        при том же Idempotency-Key).
+
+        Значения client_id / redirect_uri / scopes площадки живут в конфиге
+        (configs/platform_specs.yaml) и за адаптером площадки (A-31); в контракт
+        не попадают.
       parameters:
+        - name: marketplace
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/ImportMarketplace"
         - name: Idempotency-Key
           in: header
           required: true
           description: |
             Ключ повтора. Повторный запрос с тем же ключом и тем же телом
-            возвращает 200 и то же подключение, а не создаёт дубль.
+            возвращает тот же результат, а не создаёт второе подключение.
           schema:
             type: string
             minLength: 8
@@ -156,14 +174,8 @@ paths:
             schema:
               $ref: "#/components/schemas/CreateConnectionRequest"
       responses:
-        "201":
-          description: Подключение создано
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MarketplaceConnection"
         "200":
-          description: Повтор запроса с тем же ключом — возвращается ранее созданное подключение
+          description: OAuth-флоу начат; фронтенд редиректит браузер селлера на authorizationUrl
           headers:
             Idempotent-Replay:
               schema:
@@ -172,30 +184,38 @@ paths:
           content:
             application/json:
               schema:
+                $ref: "#/components/schemas/ConnectionAuth"
+        "201":
+          description: Подключение по API-ключу создано (статус pending до проверки адаптером)
+          content:
+            application/json:
+              schema:
                 $ref: "#/components/schemas/MarketplaceConnection"
         "400":
-          description: Ошибка валидации тела
+          description: Ошибка валидации, неизвестная площадка, механизм не поддержан площадкой, отсутствует credentialRef для api_key
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
         "409":
-          description: Подключение к этой площадке уже существует
+          description: Активное или ожидающее подключение для этой пары (продавец, площадка) уже существует
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-
-  /connections/{id}:
     get:
-      summary: Статус подключения кабинета
+      summary: Статус подключения кабинета на площадке
       operationId: getConnection
+      description: |
+        Возвращает подключение кабинета селлера к площадке. Так как на пару
+        (продавец, площадка) приходится не более одного подключения
+        (UNIQUE (seller_id, marketplace)), адресация по площадке однозначна.
       parameters:
-        - name: id
+        - name: marketplace
           in: path
           required: true
           schema:
-            type: string
+            $ref: "#/components/schemas/ImportMarketplace"
       responses:
         "200":
           description: Состояние подключения
@@ -204,7 +224,73 @@ paths:
               schema:
                 $ref: "#/components/schemas/MarketplaceConnection"
         "404":
-          description: Подключение не найдено
+          description: Подключение к площадке не найдено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /connections/{marketplace}/callback:
+    get:
+      summary: OAuth callback площадки (redirect из браузера селлера)
+      operationId: marketplaceOAuthCallback
+      description: |
+        Площадка редиректит сюда браузер селлера после согласия или отказа.
+        Вызывается без bearer-токена (редирект из чужого домена), поэтому
+        security: []. Безопасность — через `state` (CSRF) и одноразовый `code`.
+
+        Сервер сверяет state (выданный на шаге connect), обменивает code на токены
+        server-to-server (значения токенов в ответ и логи НЕ попадают, пишутся
+        сразу в секрет-менеджер), фиксирует credentialRef / scope / expiresAt и
+        статус подключения, затем редиректит браузер (302) на страницу фронтенда.
+        Целевой URL фронтенда — значение конфига, не хардкод.
+
+        Итог авторизации селлер узнаёт опросом GET /connections/{marketplace}.
+      security: []
+      parameters:
+        - name: marketplace
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/ImportMarketplace"
+        - name: code
+          in: query
+          required: false
+          description: Код авторизации (присутствует при согласии селлера).
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          description: Непрозрачный state, выданный на шаге connect (CSRF).
+          schema:
+            type: string
+        - name: error
+          in: query
+          required: false
+          description: OAuth-код ошибки при отказе селлера (напр. access_denied).
+          schema:
+            type: string
+        - name: error_description
+          in: query
+          required: false
+          description: Человекочитаемая причина отказа.
+          schema:
+            type: string
+      responses:
+        "302":
+          description: |
+            Браузер перенаправлен на страницу фронтенда (Location). Результат
+            авторизации передаётся query-параметрами редиректа, JSON-тела нет:
+            и успешный обмен токеном, и отказ площадки завершаются редиректом.
+          headers:
+            Location:
+              description: URL страницы результата на фронтенде.
+              schema:
+                type: string
+                format: uri
+        "400":
+          description: Запрос нераспознаваем (нет ни code, ни error) — редиректить некому
           content:
             application/json:
               schema:
@@ -451,34 +537,70 @@ components:
 
     CreateConnectionRequest:
       type: object
-      required: [marketplace, credentialRef]
+      required: [authMethod]
       additionalProperties: false
       properties:
-        marketplace:
-          $ref: "#/components/schemas/ImportMarketplace"
+        authMethod:
+          type: string
+          enum: [oauth, api_key]
+          description: |
+            Механизм авторизации (ADR-0005): oauth — OAuth 2.0 code flow (Ozon);
+            api_key — статический ключ площадки (Wildberries; Ozon по выбору селлера).
         credentialRef:
           type: string
           minLength: 1
           description: |
-            Имя переменной окружения / ключа секрет-менеджера, где лежит
-            креденшел площадки. Значение секрета в контракт и в БД НЕ попадает.
+            Обязателен при authMethod=api_key, запрещён при oauth. Имя переменной
+            окружения / ключа секрет-менеджера, где лежит креденшел площадки.
+            Значение секрета в контракт и в БД НЕ попадает.
+
+    ConnectionAuth:
+      type: object
+      required: [connectionId, marketplace, status, authorizationUrl, state]
+      properties:
+        connectionId:
+          type: string
+          description: id подключения (marketplace_connections.id); статус — по GET /connections/{marketplace}.
+        marketplace:
+          $ref: "#/components/schemas/ImportMarketplace"
+        status:
+          type: string
+          const: pending
+        authorizationUrl:
+          type: string
+          format: uri
+          description: Куда фронтенд редиректит браузер селлера для согласия.
+        state:
+          type: string
+          description: Непрозрачный state для callback (CSRF). Формат — деталь реализации.
 
     MarketplaceConnection:
       type: object
-      required: [id, marketplace, status, credentialRef, createdAt]
+      required: [id, marketplace, authMethod, status, credentialRef, createdAt]
       properties:
         id:
           type: string
         marketplace:
           $ref: "#/components/schemas/ImportMarketplace"
+        authMethod:
+          type: string
+          enum: [oauth, api_key]
         status:
           $ref: "#/components/schemas/ConnectionStatus"
         credentialRef:
           type: string
+          description: |
+            Имя ключа секрет-менеджера. Для oauth заполняется сервером после
+            обмена code→token; для api_key — из запроса. Значение секрета не хранится.
         scope:
           type: array
           items:
             type: string
+          description: Разрешения, выданные площадкой (для oauth — из ответа на обмен токена).
+        expiresAt:
+          type: string
+          format: date-time
+          description: Срок жизни access-токена (oauth). Отсутствует для api_key (у ключа срока нет).
         lastCheckedAt:
           type: string
           format: date-time
