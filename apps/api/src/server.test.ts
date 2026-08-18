@@ -145,7 +145,7 @@ describe('POST /orders', () => {
     expect(published.jobId).toBe(body.jobId);
     expect(published.payload).toMatchObject({
       order_id: body.orderId,
-      preset_id: 'wb-vertical-9x16',
+      preset_id: 'wb_card',
       prompt_registry_version: '2026.08.1',
       brief: { marketplace: 'wb', product_title: 'Кроссовки беговые' },
     });
@@ -304,7 +304,7 @@ const postImport = (target: FastifyInstance, body: Payload, key = 'idem-imp-0001
 
 describe('POST /imports', () => {
   it('принимает ссылку на карточку Ozon и отвечает 202 + id', async () => {
-    const res = await postImport(app, ozonLinkBody);
+    const res = await postImport(env.app, ozonLinkBody);
     expect(res.statusCode).toBe(202);
     const body = res.json();
     expect(body.id).toMatch(/^imp_/);
@@ -312,17 +312,17 @@ describe('POST /imports', () => {
   });
 
   it('повтор с тем же ключом не создаёт вторую задачу', async () => {
-    const first = await postImport(app, ozonLinkBody);
-    const second = await postImport(app, ozonLinkBody);
+    const first = await postImport(env.app, ozonLinkBody);
+    const second = await postImport(env.app, ozonLinkBody);
     expect(second.statusCode).toBe(200);
     expect(second.headers['idempotent-replay']).toBe('true');
     expect(second.json().id).toBe(first.json().id);
   });
 
   it('тот же ключ с другим телом — это другой запрос', async () => {
-    const first = await postImport(app, ozonLinkBody);
+    const first = await postImport(env.app, ozonLinkBody);
     const second = await postImport(
-      app,
+      env.app,
       { source: { kind: 'link', url: 'https://www.wildberries.ru/catalog/13579135/detail.aspx' } },
       'idem-imp-0001',
     );
@@ -331,13 +331,13 @@ describe('POST /imports', () => {
   });
 
   it('требует заголовок Idempotency-Key', async () => {
-    const res = await app.inject({ method: 'POST', url: '/imports', payload: ozonLinkBody });
+    const res = await env.app.inject({ method: 'POST', url: '/imports', payload: ozonLinkBody });
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toBe('validation_error');
   });
 
   it('валидирует тело: у files нет фото → 400', async () => {
-    const res = await postImport(app, {
+    const res = await postImport(env.app, {
       source: { kind: 'files', title: 'Без фото', photos: [] },
     });
     expect(res.statusCode).toBe(400);
@@ -345,7 +345,7 @@ describe('POST /imports', () => {
   });
 
   it('не распознанную ссылку отклоняет кодом 422', async () => {
-    const res = await postImport(app, {
+    const res = await postImport(env.app, {
       source: { kind: 'link', url: 'https://example.com/product/123456' },
     });
     expect(res.statusCode).toBe(422);
@@ -354,7 +354,7 @@ describe('POST /imports', () => {
 
   it('отсутствие активного подключения → 403 access_denied', async () => {
     const noConnection = make({ resolveConnection: () => null });
-    const res = await postImport(noConnection, ozonLinkBody);
+    const res = await postImport(noConnection.app, ozonLinkBody);
     expect(res.statusCode).toBe(403);
     expect(res.json()).toMatchObject({ error: 'access_denied', reason: 'no_connection' });
   });
@@ -362,8 +362,8 @@ describe('POST /imports', () => {
 
 describe('GET /imports/:id', () => {
   it('возвращает статус созданной задачи импорта', async () => {
-    const created = await postImport(app, ozonLinkBody);
-    const res = await app.inject({ method: 'GET', url: `/imports/${created.json().id}` });
+    const created = await postImport(env.app, ozonLinkBody);
+    const res = await env.app.inject({ method: 'GET', url: `/imports/${created.json().id}` });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({
       status: 'queued',
@@ -373,7 +373,7 @@ describe('GET /imports/:id', () => {
   });
 
   it('404 на неизвестной задаче', async () => {
-    const res = await app.inject({ method: 'GET', url: '/imports/imp_нет' });
+    const res = await env.app.inject({ method: 'GET', url: '/imports/imp_нет' });
     expect(res.statusCode).toBe(404);
   });
 });
