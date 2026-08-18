@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hermes.local/contracts/queues/prepare.json",
+  "title": "prepare.job",
+  "description": "Стадия [2] подготовки (A-32): отбор лучшего фото, сегментация, маска, отбраковка ДО генерации. Фаза E2. Compute-очередь: платит за сегментацию, а не за генерацию — cost_estimate берётся из configs/cost_targets.yaml → cost.other_compute_breakdown_rub.source_selection_and_segmentation. Отбракованный SKU (verdict=rejected) обязан попасть в отчёт покрытия с reject_reason: попытки всегда в паре с покрытием, тихая отбраковка подделывает метрику.",
+  "type": "object",
+  "required": [
+    "idempotency_key",
+    "trace_id",
+    "order_id",
+    "preset_id",
+    "prompt_registry_version",
+    "cost_estimate",
+    "attempt_policy",
+    "card_id"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "idempotency_key": { "type": "string", "minLength": 8 },
+    "trace_id": { "type": "string", "minLength": 1 },
+    "order_id": { "type": "string", "minLength": 1 },
+    "preset_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Пресет площадки. Определяет целевой формат выдачи; минимальное разрешение фото и целевой аспект берутся из configs/master_format.yaml, а не хардкодятся."
+    },
+    "prompt_registry_version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Версия конфигурации отбора/сегментации (модель + эвристики). Аналог версии реестра промптов: воспроизводимость решения об отборе и маски спустя месяцы."
+    },
+    "cost_estimate": { "$ref": "#/$defs/money" },
+    "attempt_policy": { "$ref": "#/$defs/attemptPolicy" },
+    "card_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Идентификатор ProductCard (product_cards.id). Вход воркера — карточка: фото и метаданные воркер читает из БД через packages/domain, payload их не дублирует. Состав входа — $defs.productCardInput."
+    },
+    "backend": {
+      "type": "string",
+      "default": "mock",
+      "description": "Адаптер сегментации за одним интерфейсом (см. contracts/workers/prepare-worker.md). mock обязателен для тестов и CI. Провайдер-специфика (rembg / segment-anything / облако) в домен и в payload не течёт."
+    }
+  },
+  "$defs": {
+    "money": {
+      "type": "object",
+      "required": ["amount_minor", "currency"],
+      "additionalProperties": false,
+      "properties": {
+        "amount_minor": { "type": "integer", "minimum": 0 },
+        "currency": { "type": "string", "enum": ["RUB", "USD"] }
+      }
+    },
+    "attemptPolicy": {
+      "type": "object",
+      "required": ["max_technical_retries", "billable"],
+      "additionalProperties": false,
+      "properties": {
+        "max_technical_retries": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "billable": { "type": "boolean" }
+      }
+    },
+    "productCardInput": {
+      "type": "object",
+      "description": "Поля ProductCard, которые стадия [2] потребляет по card_id. Справочно: в payload job эти поля не дублируются.",
+      "required": ["photo_keys"],
+      "additionalProperties": false,
+      "properties": {
+        "photo_keys": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" },
+          "description": "S3-ключи исходных фото карточки — кандидаты на отбор. Пустой массив ⇒ reject_reason=no_photos."
+        },
+        "category": {
+          "type": "string",
+          "description": "Наша категория (clothing / home_garden / electronics). Может отсутствовать на импорте — тогда отбор без учёта категории."
+        },
+        "marketplace": { "type": "string", "enum": ["ozon", "wb"] },
+        "title": {
+          "type": "string",
+          "description": "Название товара — для детекции субъекта и для отчёта покрытия."
+        }
+      }
+    },
+    "prepareResult": {
+      "type": "object",
+      "description": "Выход worker-prepare (вердикт + отобранное фото + маска). Пишется в результат job. verdict=rejected ⇒ SKU не идёт в генерацию и обязан попасть в отчёт покрытия с reject_reason и reject_detail.",
+      "required": ["verdict"],
+      "additionalProperties": false,
+      "properties": {
+        "verdict": { "type": "string", "enum": ["selected", "rejected"] },
+        "selected_photo": {
+          "type": "string",
+          "description": "S3-ключ отобранного фото. Присутствует только при verdict=selected."
+        },
+        "mask": {
+          "type": "string",
+          "description": "S3-ключ маски сегментации (альфа-канал). Присутствует только при verdict=selected."
+        },
+        "photo": {
+          "type": "object",
+          "description": "Метаданные отобранного фото. Разрешение и аспект проверяются против configs/master_format.yaml → generation (resolution, аспект 3:4); числа здесь не дублируются.",
+          "required": ["width_px", "height_px"],
+          "additionalProperties": false,
+          "properties": {
+            "width_px": { "type": "integer", "minimum": 1 },
+            "height_px": { "type": "integer", "minimum": 1 },
+            "aspect": {
+              "type": "string",
+              "description": "Соотношение сторон. Целевое 3:4 — из configs/master_format.yaml → master.aspect."
+            },
+            "confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Уверенность отбора/сегментации — вход телеметрии роутера (категория × шаблон × модель)."
+            }
+          }
+        },
+        "reject_reason": {
+          "type": "string",
+          "enum": [
+            "no_photos",
+            "resolution_below_min",
+            "subject_not_detected",
+            "segmentation_failed",
+            "photo_qc_failed"
+          ],
+          "description": "Причина отбраковки ДО генерации. Обязательна при verdict=rejected. Попадает в отчёт покрытия как «SKU не покрыт, причина» — парная метрика к «попыткам», не тихий отказ."
+        },
+        "reject_detail": {
+          "type": "string",
+          "description": "Человекочитаемая деталь (какое фото, что не так) для отчёта селлеру."
+        }
+      }
+    }
+  }
+}
