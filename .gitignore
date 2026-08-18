@@ -1,7 +1,11 @@
 node_modules/
 dist/
 .next/
+build/
+.svelte-kit/
 coverage/
+__pycache__/
+*.pyc
 .env
 .env.local
 *.log

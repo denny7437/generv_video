@@ -79,3 +79,76 @@ CREATE TABLE spend_log (
 
 CREATE INDEX spend_log_order_idx ON spend_log (order_id, created_at);
 CREATE INDEX spend_log_created_idx ON spend_log (created_at);
+
+-- «Подключение кабинета» — продавец авторизует сервис на одной площадке (ADR-0003).
+-- Механизм авторизации (OAuth / API-ключ) — ADR-0005, специфика флоу за адаптером.
+CREATE TABLE marketplace_connections (
+    id               TEXT PRIMARY KEY,
+    seller_id        TEXT        NOT NULL,
+    marketplace      TEXT        NOT NULL CHECK (marketplace IN ('ozon', 'wb')),
+    -- Механизм авторизации: oauth (Ozon, code flow) или api_key (WB; Ozon по выбору).
+    auth_method      TEXT        NOT NULL DEFAULT 'api_key'
+                     CHECK (auth_method IN ('oauth', 'api_key')),
+    -- Имя переменной окружения / ключа секрет-менеджера. Значение секрета не хранится.
+    credential_ref   TEXT        NOT NULL,
+    status           TEXT        NOT NULL DEFAULT 'pending'
+                     CHECK (status IN ('pending', 'active', 'expired', 'revoked')),
+    scope            TEXT[]      NOT NULL DEFAULT '{}',
+    -- Срок жизни access-токена (oauth). NULL для api_key — у ключа срока нет.
+    expires_at       TIMESTAMPTZ,
+    last_checked_at  TIMESTAMPTZ,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (seller_id, marketplace)
+);
+
+CREATE INDEX marketplace_connections_seller_idx ON marketplace_connections (seller_id);
+
+-- Импортированная карточка товара (данные для брифа, фото — ключами S3, TTL).
+CREATE TABLE product_cards (
+    id               TEXT PRIMARY KEY,
+    seller_id        TEXT        NOT NULL,
+    marketplace      TEXT        CHECK (marketplace IN ('ozon', 'wb')),
+    source           TEXT        NOT NULL CHECK (source IN ('marketplace_api', 'manual')),
+    source_url       TEXT,
+    external_id      TEXT,
+    title            TEXT,
+    description      TEXT,
+    attributes       JSONB       NOT NULL DEFAULT '{}'::jsonb,
+    category         TEXT,
+    photo_keys       TEXT[]      NOT NULL DEFAULT '{}',
+    raw_payload_sha256 TEXT,
+    expires_at       TIMESTAMPTZ NOT NULL,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX product_cards_seller_created_idx ON product_cards (seller_id, created_at);
+CREATE INDEX product_cards_expires_idx ON product_cards (expires_at);
+CREATE UNIQUE INDEX product_cards_external_uniq
+    ON product_cards (marketplace, external_id) WHERE external_id IS NOT NULL;
+
+-- Задача импорта (асинхронная, НЕ платная очередь генерации).
+CREATE TABLE import_jobs (
+    id               TEXT PRIMARY KEY,
+    seller_id        TEXT        NOT NULL,
+    connection_id    TEXT        REFERENCES marketplace_connections (id) ON DELETE SET NULL,
+    marketplace      TEXT        CHECK (marketplace IN ('ozon', 'wb')),
+    input_kind       TEXT        NOT NULL CHECK (input_kind IN ('link', 'files')),
+    source_url       TEXT,
+    idempotency_key  TEXT        NOT NULL,
+    status           TEXT        NOT NULL CHECK (status IN ('queued', 'running', 'ready', 'failed')),
+    card_id          TEXT        REFERENCES product_cards (id),
+    failure_reason   TEXT        CHECK (failure_reason IN
+                        ('unrecognized_link', 'marketplace_unavailable',
+                         'insufficient_data', 'access_denied')),
+    failure_detail   TEXT,
+    trace_id         TEXT        NOT NULL,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX import_jobs_idempotency_key_uniq ON import_jobs (idempotency_key);
+CREATE INDEX import_jobs_seller_created_idx ON import_jobs (seller_id, created_at);
+CREATE INDEX import_jobs_status_created_idx ON import_jobs (status, created_at);
+

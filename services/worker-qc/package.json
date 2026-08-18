@@ -5,6 +5,7 @@
   "type": "module",
   "main": "src/index.ts",
   "dependencies": {
-    "@hermes/domain": "workspace:*"
+    "@hermes/domain": "workspace:*",
+    "yaml": "^2.9.0"
   }
 }

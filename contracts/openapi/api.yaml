@@ -130,6 +130,340 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /connections/{marketplace}:
+    post:
+      summary: Подключить кабинет продавца на площадке (OAuth или API-ключ)
+      operationId: connectMarketplace
+      description: |
+        Единая точка входа в авторизацию площадки (ADR-0005). Механизм задаётся
+        полем authMethod в теле и должен поддерживаться площадкой:
+
+        - oauth — OAuth 2.0 Authorization Code flow (RFC 6749) со `state` (CSRF).
+          Поддерживается Ozon. Ответ 200 содержит authorizationUrl — фронтенд
+          редиректит на него браузер селлера; завершение — через callback.
+        - api_key — статический ключ площадки, который селлер вставляет сам.
+          Wildberries (и Ozon по выбору). credentialRef — имя ключа секрет-менеджера,
+          НЕ значение секрета.
+
+        Одно подключение на пару (продавец, площадка). Повторная регистрация при
+        существующем active/pending подключении — 409 (или 200 с Idempotent-Replay
+        при том же Idempotency-Key).
+
+        Значения client_id / redirect_uri / scopes площадки живут в конфиге
+        (configs/platform_specs.yaml) и за адаптером площадки (A-31); в контракт
+        не попадают.
+      parameters:
+        - name: marketplace
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/ImportMarketplace"
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: |
+            Ключ повтора. Повторный запрос с тем же ключом и тем же телом
+            возвращает тот же результат, а не создаёт второе подключение.
+          schema:
+            type: string
+            minLength: 8
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConnectionRequest"
+      responses:
+        "200":
+          description: OAuth-флоу начат; фронтенд редиректит браузер селлера на authorizationUrl
+          headers:
+            Idempotent-Replay:
+              schema:
+                type: string
+                enum: ["true"]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectionAuth"
+        "201":
+          description: Подключение по API-ключу создано (статус pending до проверки адаптером)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceConnection"
+        "400":
+          description: Ошибка валидации, неизвестная площадка, механизм не поддержан площадкой, отсутствует credentialRef для api_key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Активное или ожидающее подключение для этой пары (продавец, площадка) уже существует
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    get:
+      summary: Статус подключения кабинета на площадке
+      operationId: getConnection
+      description: |
+        Возвращает подключение кабинета селлера к площадке. Так как на пару
+        (продавец, площадка) приходится не более одного подключения
+        (UNIQUE (seller_id, marketplace)), адресация по площадке однозначна.
+      parameters:
+        - name: marketplace
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/ImportMarketplace"
+      responses:
+        "200":
+          description: Состояние подключения
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceConnection"
+        "404":
+          description: Подключение к площадке не найдено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /connections/{marketplace}/callback:
+    get:
+      summary: OAuth callback площадки (redirect из браузера селлера)
+      operationId: marketplaceOAuthCallback
+      description: |
+        Площадка редиректит сюда браузер селлера после согласия или отказа.
+        Вызывается без bearer-токена (редирект из чужого домена), поэтому
+        security: []. Безопасность — через `state` (CSRF) и одноразовый `code`.
+
+        Сервер сверяет state (выданный на шаге connect), обменивает code на токены
+        server-to-server (значения токенов в ответ и логи НЕ попадают, пишутся
+        сразу в секрет-менеджер), фиксирует credentialRef / scope / expiresAt и
+        статус подключения, затем редиректит браузер (302) на страницу фронтенда.
+        Целевой URL фронтенда — значение конфига, не хардкод.
+
+        Итог авторизации селлер узнаёт опросом GET /connections/{marketplace}.
+      security: []
+      parameters:
+        - name: marketplace
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/ImportMarketplace"
+        - name: code
+          in: query
+          required: false
+          description: Код авторизации (присутствует при согласии селлера).
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          description: Непрозрачный state, выданный на шаге connect (CSRF).
+          schema:
+            type: string
+        - name: error
+          in: query
+          required: false
+          description: OAuth-код ошибки при отказе селлера (напр. access_denied).
+          schema:
+            type: string
+        - name: error_description
+          in: query
+          required: false
+          description: Человекочитаемая причина отказа.
+          schema:
+            type: string
+      responses:
+        "302":
+          description: |
+            Браузер перенаправлен на страницу фронтенда (Location). Результат
+            авторизации передаётся query-параметрами редиректа, JSON-тела нет:
+            и успешный обмен токеном, и отказ площадки завершаются редиректом.
+          headers:
+            Location:
+              description: URL страницы результата на фронтенде.
+              schema:
+                type: string
+                format: uri
+        "400":
+          description: Запрос нераспознаваем (нет ни code, ни error) — редиректить некому
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /imports:
+    post:
+      summary: Импортировать карточку товара
+      operationId: createImport
+      description: |
+        Импорт карточки: по ссылке на карточку Ozon/WB (через официальный API
+        площадки по подключению кабинета) либо из загруженных вручную файлов.
+        Операция асинхронная: 202 + id, статус — по GET /imports/{id}.
+        Синхронного импорта в контракте не существует.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: |
+            Ключ повтора. Повторный запрос с тем же ключом и тем же телом
+            возвращает 200 и ту же задачу импорта, а не создаёт вторую.
+          schema:
+            type: string
+            minLength: 8
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateImportRequest"
+      responses:
+        "202":
+          description: Импорт принят, задача поставлена в очередь
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportRef"
+        "200":
+          description: Повтор запроса с тем же ключом — возвращается ранее созданная задача
+          headers:
+            Idempotent-Replay:
+              schema:
+                type: string
+                enum: ["true"]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportRef"
+        "400":
+          description: Ошибка валидации тела (нет ни ссылки, ни файлов; у файлов нет фото)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportError"
+        "403":
+          description: Доступ запрещён — нет активного подключения кабинета, токен истёк или недостаточно прав
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportError"
+        "422":
+          description: Ссылка не распознана как карточка Ozon/WB
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportError"
+
+  /imports/{id}:
+    get:
+      summary: Статус импорта
+      operationId: getImport
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Текущее состояние задачи импорта
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportJob"
+        "404":
+          description: Задача импорта не найдена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /exports:
+    post:
+      summary: Создать пакетный экспорт готовых роликов (ZIP + XLSX-манифест)
+      operationId: createExport
+      description: |
+        Стадия [7] Публикация, MVP-путь (записка §5.1, ADR-0005): пакетный экспорт
+        готовых роликов для ручной загрузки на площадку — API-загрузка видео
+        официально не документирована ни у Ozon, ни у WB. Операция асинхронная:
+        202 + id, статус — по GET /exports/{id}. Синхронного экспорта не существует.
+        Один экспорт = одна площадка + один пресет-дериватив из
+        configs/master_format.yaml → derivatives[].id.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: |
+            Ключ повтора. Повторный запрос с тем же ключом и тем же телом
+            возвращает 200 и тот же экспорт, а не пересобирает архив.
+          schema:
+            type: string
+            minLength: 8
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateExportRequest"
+      responses:
+        "202":
+          description: Экспорт принят, job поставлена в очередь
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportRef"
+        "200":
+          description: Повтор запроса с тем же ключом — возвращается ранее созданный экспорт
+          headers:
+            Idempotent-Replay:
+              schema:
+                type: string
+                enum: ["true"]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportRef"
+        "400":
+          description: Ошибка валидации тела (пустой список SKU, больше 400 артикулов, неизвестный пресет)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Пресет площадки не подтверждён и не может использоваться на боевой выдаче
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /exports/{id}:
+    get:
+      summary: Статус пакетного экспорта
+      operationId: getExport
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Текущее состояние экспорта; при status=ready содержит ссылки на архив и манифест
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportJob"
+        "404":
+          description: Экспорт не найден
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -273,3 +607,375 @@ components:
           type: integer
         wouldBeMinor:
           type: integer
+
+    ImportMarketplace:
+      type: string
+      enum: [ozon, wb]
+      description: Площадки с реализованным импортом. ym — фаза 3, вне MVP.
+
+    ConnectionStatus:
+      type: string
+      enum: [pending, active, expired, revoked]
+
+    CreateConnectionRequest:
+      type: object
+      required: [authMethod]
+      additionalProperties: false
+      properties:
+        authMethod:
+          type: string
+          enum: [oauth, api_key]
+          description: |
+            Механизм авторизации (ADR-0005): oauth — OAuth 2.0 code flow (Ozon);
+            api_key — статический ключ площадки (Wildberries; Ozon по выбору селлера).
+        credentialRef:
+          type: string
+          minLength: 1
+          description: |
+            Обязателен при authMethod=api_key, запрещён при oauth. Имя переменной
+            окружения / ключа секрет-менеджера, где лежит креденшел площадки.
+            Значение секрета в контракт и в БД НЕ попадает.
+
+    ConnectionAuth:
+      type: object
+      required: [connectionId, marketplace, status, authorizationUrl, state]
+      properties:
+        connectionId:
+          type: string
+          description: id подключения (marketplace_connections.id); статус — по GET /connections/{marketplace}.
+        marketplace:
+          $ref: "#/components/schemas/ImportMarketplace"
+        status:
+          type: string
+          const: pending
+        authorizationUrl:
+          type: string
+          format: uri
+          description: Куда фронтенд редиректит браузер селлера для согласия.
+        state:
+          type: string
+          description: Непрозрачный state для callback (CSRF). Формат — деталь реализации.
+
+    MarketplaceConnection:
+      type: object
+      required: [id, marketplace, authMethod, status, credentialRef, createdAt]
+      properties:
+        id:
+          type: string
+        marketplace:
+          $ref: "#/components/schemas/ImportMarketplace"
+        authMethod:
+          type: string
+          enum: [oauth, api_key]
+        status:
+          $ref: "#/components/schemas/ConnectionStatus"
+        credentialRef:
+          type: string
+          description: |
+            Имя ключа секрет-менеджера. Для oauth заполняется сервером после
+            обмена code→token; для api_key — из запроса. Значение секрета не хранится.
+        scope:
+          type: array
+          items:
+            type: string
+          description: Разрешения, выданные площадкой (для oauth — из ответа на обмен токена).
+        expiresAt:
+          type: string
+          format: date-time
+          description: Срок жизни access-токена (oauth). Отсутствует для api_key (у ключа срока нет).
+        lastCheckedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ImportSourceLink:
+      type: object
+      required: [kind, url]
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          const: link
+        url:
+          type: string
+          format: uri
+          description: Ссылка на карточку Ozon/WB. Площадка резолвится из URL.
+        marketplace:
+          $ref: "#/components/schemas/ImportMarketplace"
+          description: Необязательная подсказка; по умолчанию резолвится из url.
+
+    ImportSourceFiles:
+      type: object
+      required: [kind, title, photos]
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          const: files
+        title:
+          type: string
+          minLength: 1
+          maxLength: 300
+        description:
+          type: string
+        attributes:
+          type: object
+          additionalProperties: true
+          description: |
+            Характеристики товара. Схемы Ozon и WB принципиально разные,
+            поэтому свободный объект (в БД — JSONB), не фиксированная схема.
+        photos:
+          type: array
+          minItems: 1
+          items:
+            type: string
+          description: S3-ключи исходных фото (загружены в медиатеку отдельно). Бинарей в теле нет.
+
+    ImportSource:
+      type: object
+      required: [kind]
+      oneOf:
+        - $ref: "#/components/schemas/ImportSourceLink"
+        - $ref: "#/components/schemas/ImportSourceFiles"
+
+    CreateImportRequest:
+      type: object
+      required: [source]
+      additionalProperties: false
+      properties:
+        source:
+          $ref: "#/components/schemas/ImportSource"
+
+    ImportStatus:
+      type: string
+      enum: [queued, running, ready, failed]
+
+    ImportRef:
+      type: object
+      required: [id, status]
+      properties:
+        id:
+          type: string
+        status:
+          $ref: "#/components/schemas/ImportStatus"
+
+    ImportErrorCode:
+      type: string
+      enum:
+        [
+          unrecognized_link,
+          marketplace_unavailable,
+          insufficient_data,
+          access_denied,
+          validation_error,
+        ]
+
+    ImportError:
+      type: object
+      required: [error]
+      description: |
+        Коды ошибок импорта, разделённые по причине:
+        - unrecognized_link (422 на POST) — ссылка не распознана как карточка Ozon/WB;
+        - marketplace_unavailable (в ImportJob.failure) — площадка недоступна/таймаут при выгрузке;
+        - insufficient_data (в ImportJob.failure) — карточка есть, но данных для брифа не хватает
+          (нет фото / пустое название);
+        - access_denied (403 на POST или в ImportJob.failure) — нет активного подключения,
+          токен истёк/отозван, недостаточно прав;
+        - validation_error (400) — тело запроса невалидно.
+      properties:
+        error:
+          $ref: "#/components/schemas/ImportErrorCode"
+        reason:
+          type: string
+          description: |
+            Детализация причины. Примеры: access_denied → no_connection | token_expired |
+            insufficient_scope; insufficient_data → no_photos | empty_title.
+        message:
+          type: string
+        issues:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              message:
+                type: string
+
+    ImportJob:
+      type: object
+      required: [id, status, source, traceId, createdAt]
+      properties:
+        id:
+          type: string
+        status:
+          $ref: "#/components/schemas/ImportStatus"
+        source:
+          $ref: "#/components/schemas/ImportSource"
+        cardId:
+          type: string
+          description: Идентификатор импортированной карточки (product_cards.id) при status=ready.
+        failure:
+          $ref: "#/components/schemas/ImportError"
+          description: Причина при status=failed.
+        traceId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ExportMarketplace:
+      type: string
+      enum: [ozon, wb]
+      description: Площадки с реализованной выдачей. ym — фаза 3, вне MVP.
+
+    ExportStatus:
+      type: string
+      enum: [queued, running, ready, failed]
+
+    CreateExportRequest:
+      type: object
+      required: [marketplace, presetId, skus]
+      additionalProperties: false
+      properties:
+        marketplace:
+          $ref: "#/components/schemas/ExportMarketplace"
+        presetId:
+          type: string
+          description: |
+            Идентификатор деривата из configs/master_format.yaml → derivatives[].id
+            (ozon_cover_vertical | ozon_cover_square | wb_card). Числа формата
+            (разрешение, fps, кодек, лимит веса) в контракт не копируются — они
+            живут только в master_format.yaml.
+        skus:
+          type: array
+          minItems: 1
+          maxItems: 400
+          description: |
+            Артикулы селлера, для которых собрать экспорт. Пакет под 400 SKU за раз
+            (записка §5.1). Отклонённый SKU не исчезает — попадает в манифест
+            со статусом rejected и причиной.
+          items:
+            type: string
+            minLength: 1
+
+    ExportRef:
+      type: object
+      required: [id, status]
+      properties:
+        id:
+          type: string
+        status:
+          $ref: "#/components/schemas/ExportStatus"
+
+    ExportItemStatus:
+      type: string
+      enum: [ready, rejected]
+
+    ExportRejectReason:
+      type: string
+      enum: [source_rejected, qc_failed, max_attempts_reached]
+      description: |
+        source_rejected — исходник отбракован на стадии [2];
+        qc_failed — ролик не прошёл автовалидацию;
+        max_attempts_reached — исчерпан потолок попыток
+        (cost_targets.generation.max_attempts_per_sku).
+
+    ExportManifestRow:
+      type: object
+      required: [sku, status]
+      properties:
+        sku:
+          type: string
+          description: Артикул селлера.
+        title:
+          type: string
+        videoFile:
+          type: string
+          description: Имя файла ролика внутри ZIP. null — файла нет (SKU отклонён).
+        status:
+          $ref: "#/components/schemas/ExportItemStatus"
+        rejectReason:
+          $ref: "#/components/schemas/ExportRejectReason"
+        attemptsUsed:
+          type: integer
+          minimum: 0
+          description: Потраченные попытки. Потолок — cost_targets.generation.max_attempts_per_sku.
+
+    ExportSummary:
+      type: object
+      required: [total, ready, rejected]
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        ready:
+          type: integer
+          minimum: 0
+        rejected:
+          type: integer
+          minimum: 0
+
+    ExportArchive:
+      type: object
+      required: [ref, checksumSha256, sizeBytes]
+      properties:
+        ref:
+          type: string
+          description: Ключ объекта ZIP в S3 (путей в ФС и бинарей в контракте нет).
+        checksumSha256:
+          type: string
+        sizeBytes:
+          type: integer
+          minimum: 0
+        downloadUrl:
+          type: string
+          format: uri
+          description: Временная presigned-ссылка. Необязательна; срок жизни и выдача — реализация.
+
+    ExportJob:
+      type: object
+      required: [id, status, marketplace, presetId, promptRegistryVersion, summary, createdAt]
+      properties:
+        id:
+          type: string
+        status:
+          $ref: "#/components/schemas/ExportStatus"
+        marketplace:
+          $ref: "#/components/schemas/ExportMarketplace"
+        presetId:
+          type: string
+        promptRegistryVersion:
+          type: string
+          description: Без неё состав роликов в архиве невоспроизводим.
+        summary:
+          $ref: "#/components/schemas/ExportSummary"
+        manifest:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExportManifestRow"
+          description: Строки манифеста (SKU → файл ролика → статус) при status=ready.
+        manifestRef:
+          type: string
+          description: Ключ S3 XLSX-манифеста (SKU → файл ролика → статус) при status=ready.
+        archive:
+          $ref: "#/components/schemas/ExportArchive"
+          description: Готовый ZIP (videos/ + manifest.xlsx + README.txt) при status=ready.
+        failure:
+          $ref: "#/components/schemas/Error"
+          description: Причина при status=failed.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+

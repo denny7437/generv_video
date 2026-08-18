@@ -9,7 +9,13 @@
 | Компонент | Репо | Версия | Лицензия | Режим | Где используется | Задача | Проверено |
 |---|---|---|---|---|---|---|---|
 | HTTP-сервер | `fastify` | ^5.1.0 | MIT | reuse | `apps/api` | скелет | 2026-08-17 |
-| Валидация входа | `zod` | ^3.23.8 | MIT | reuse | `apps/api` | скелет | 2026-08-17 |
+| Валидация входа | `zod` | ^3.23.8 | MIT | reuse | `apps/api`, `services/worker-import` | скелет, TEC-42 | 2026-08-17 |
+| UI-фреймворк | `svelte` | ^5.56.9 | MIT | reuse | `apps/web` | TEC-47 | 2026-08-18 |
+| Headless-компоненты | `bits-ui` | ^2.18.1 | MIT | reuse | `apps/web` | TEC-47 | 2026-08-18 |
+| Даты (peer-зависимость bits-ui) | `@internationalized/date` | ^3.8.1 | Apache-2.0 | reuse | `apps/web` | TEC-47 | 2026-08-18 |
+| Клиент очередей | `bullmq` | ^5.72.1 | MIT | reuse | `services/worker-assembly` | TEC-45 | 2026-08-18 |
+| Redis-клиент | `ioredis` | ^5.10.1 | MIT | reuse | `services/worker-assembly` | TEC-45 | 2026-08-18 |
+| Парсер YAML (конфиги) | `yaml` | ^2.9.0 | ISC | reuse | `services/worker-assembly`, `services/worker-qc` | TEC-45, TEC-46 | 2026-08-18 |
 
 ## Инструменты разработки
 
@@ -22,6 +28,13 @@
 | `eslint`, `typescript-eslint`, `@eslint/js` | MIT | линтер |
 | `tsx` | MIT | запуск TypeScript в dev |
 | `@types/node` | MIT | типы Node.js |
+| `@sveltejs/kit` | MIT | SvelteKit-каркас apps/web |
+| `@sveltejs/adapter-static` | MIT | статическая сборка PWA |
+| `@sveltejs/vite-plugin-svelte` | MIT | компиляция Svelte в Vite |
+| `@tailwindcss/vite` | MIT | Tailwind CSS 4 в Vite |
+| `tailwindcss` | MIT | стили и темизация |
+| `svelte-check` | MIT | проверка типов Svelte |
+| `vite` | MIT | сборка фронтенда |
 
 ## Внешние бинарные зависимости
 
@@ -35,16 +48,20 @@
 
 | Что искали | Кандидаты | Почему отказались | Задача | Дата |
 |---|---|---|---|---|
-| — | — | — | — | — |
+| База фронтенда (каркас + темизация + PWA) | Open WebUI (`open-webui/open-webui`) | Лицензия не BSD-3: «Open WebUI License» = BSD-3 + пункт 4 (запрет снимать бренд Open WebUI при >50 юзеров/30 дней без письменного разрешения или enterprise-лицензии). Fork/extract под собственный UI кабинета селлера попадает под пункт 4. Плюс монолит: ~40 из ~110 frontend-зависимостей — чат/RAG/редакторы/pyodide-связка, кабинету не нужны. Стек взят как MIT-библиотеки напрямую (SvelteKit/Svelte/Tailwind/bits-ui) | TEC-38 | 2026-08-18 |
+| Апскейл клипов до мастера (×1,5) | Real-ESRGAN, Video2X, waifu2x | AI-апскейл «досочиняет» текстуру и детали, которых нет на фото товара — нарушает правило product fidelity; лицензия весов часто non-commercial; плюс GPU-стоимость на сотни SKU. Выбран детерминированный апскейл ffmpeg (`scale` с `flags=lanczos`), уже в паке | TEC-45 | 2026-08-18 |
+| TS-клиент Ozon Seller API для импорта карточки | `salacoste/ozon-daytona-seller-api` (TypeScript SDK, MIT) | На стадии [1] нужен один метод — выгрузка карточки по product_id (`/v2/product/info` + `/v1/product/info/attributes`). SDK тянет 278 методов/33 категории (~2 MB), 15 звёзд, одиночный AI-мейнтейнер, месяц от последнего коммита — зависимость ради одного метода не берём (скилл oss-scout: «зависимость ради одной функции»). Зрелого WB-клиента в TS нет (ADR-0003), поэтому тонкий клиент поверх официального swagger нужен в любом случае. Написан тонкий адаптер `services/worker-import/src/adapters/ozon.ts` поверх официального API | TEC-42 | 2026-08-18 |
+| Сегментация фона для стадии [2] | `Remove-Background-ai/rembg.js` (заявлен «TypeScript, MIT») | Фактически zero-config обёртка над облачным API rembg.com: фото продавца уходят на сторонний сервер — вендор-лок и передача данных третьей стороне; лицензия «RemBG Attribution License (MIT-Compatible)», а не чистый MIT. Self-host по умолчанию — `facebookresearch/segment-anything` (Apache-2.0, код и веса), локально в GPU-пуле Python (ADR-0002). Контракт фиксирует один интерфейс адаптера с полем `backend`, выбор модели — dev-задача | TEC-49 | 2026-08-18 |
 
 ## Что ещё предстоит выбрать
 
 Пустые строки — это не «забыли», а честная карта нерешённого. Каждая закрывается задачей с нулевой фазой OSS-разведки:
 
-- клиент очередей (BullMQ) и UI наблюдаемости за ними;
+- UI наблюдаемости за очередями (клиент — `bullmq`, выбран в TEC-45);
 - S3-клиент;
 - провайдер генерации видео (коммерческий API и/или локальная модель);
 - TTS для озвучки;
-- фронтенд-стек и компонентная база;
+- компонентная база кабинета селлера (плеер, превью, загрузка файлов, редактор таймлайна) — стек зафиксирован ADR-0004 (SvelteKit/Svelte 5/Tailwind 4/bits-ui), конкретные библиотеки выбираются в задаче A-34 с нулевой фазой OSS-разведки;
 - Playwright и оснастка e2e;
-- миграционный инструмент.
+- миграционный инструмент;
+- модель сегментации для стадии [2] — кандидат `segment-anything` (Apache-2.0, self-host), `rembg.js` отклонён (см. Отказы).

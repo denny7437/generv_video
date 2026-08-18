@@ -5,6 +5,8 @@
   "type": "module",
   "main": "src/index.ts",
   "dependencies": {
-    "@hermes/domain": "workspace:*"
+    "bullmq": "^5.72.1",
+    "ioredis": "^5.10.1",
+    "yaml": "^2.7.0"
   }
 }
