@@ -13,9 +13,11 @@
 | UI-фреймворк | `svelte` | ^5.56.9 | MIT | reuse | `apps/web` | TEC-47 | 2026-08-18 |
 | Headless-компоненты | `bits-ui` | ^2.18.1 | MIT | reuse | `apps/web` | TEC-47 | 2026-08-18 |
 | Даты (peer-зависимость bits-ui) | `@internationalized/date` | ^3.8.1 | Apache-2.0 | reuse | `apps/web` | TEC-47 | 2026-08-18 |
-| Клиент очередей | `bullmq` | ^5.72.1 | MIT | reuse | `services/worker-assembly` | TEC-45 | 2026-08-18 |
-| Redis-клиент | `ioredis` | ^5.10.1 | MIT | reuse | `services/worker-assembly` | TEC-45 | 2026-08-18 |
+| Клиент очередей | `bullmq` | ^5.72.1 | MIT | reuse | `services/worker-assembly`, `services/worker-publish` | TEC-45, TEC-52 | 2026-08-18 |
+| Redis-клиент | `ioredis` | ^5.10.1 | MIT | reuse | `services/worker-assembly`, `services/worker-publish` | TEC-45, TEC-52 | 2026-08-18 |
 | Парсер YAML (конфиги) | `yaml` | ^2.9.0 | ISC | reuse | `services/worker-assembly`, `services/worker-qc` | TEC-45, TEC-46 | 2026-08-18 |
+| Генерация XLSX-манифеста | `exceljs` | ^4.4.0 | MIT | reuse | `services/worker-publish` | TEC-52 | 2026-08-19 |
+| ZIP-архивация выдачи | `archiver` | ^8.0.0 | MIT | reuse | `services/worker-publish` | TEC-52 | 2026-08-19 |
 
 ## Инструменты разработки
 
