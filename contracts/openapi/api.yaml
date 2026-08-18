@@ -130,6 +130,172 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /connections:
+    post:
+      summary: Подключить кабинет продавца на площадке
+      operationId: createConnection
+      description: |
+        Регистрирует «подключение кабинета» — сущность, через которую импорт
+        карточки ходит в официальный API площадки (ADR-0003, вариант «а»).
+        credentialRef — имя переменной окружения / ключа секрет-менеджера,
+        НЕ значение секрета. Одно подключение на пару (продавец, площадка).
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: |
+            Ключ повтора. Повторный запрос с тем же ключом и тем же телом
+            возвращает 200 и то же подключение, а не создаёт дубль.
+          schema:
+            type: string
+            minLength: 8
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConnectionRequest"
+      responses:
+        "201":
+          description: Подключение создано
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceConnection"
+        "200":
+          description: Повтор запроса с тем же ключом — возвращается ранее созданное подключение
+          headers:
+            Idempotent-Replay:
+              schema:
+                type: string
+                enum: ["true"]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceConnection"
+        "400":
+          description: Ошибка валидации тела
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Подключение к этой площадке уже существует
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /connections/{id}:
+    get:
+      summary: Статус подключения кабинета
+      operationId: getConnection
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Состояние подключения
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceConnection"
+        "404":
+          description: Подключение не найдено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /imports:
+    post:
+      summary: Импортировать карточку товара
+      operationId: createImport
+      description: |
+        Импорт карточки: по ссылке на карточку Ozon/WB (через официальный API
+        площадки по подключению кабинета) либо из загруженных вручную файлов.
+        Операция асинхронная: 202 + id, статус — по GET /imports/{id}.
+        Синхронного импорта в контракте не существует.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: |
+            Ключ повтора. Повторный запрос с тем же ключом и тем же телом
+            возвращает 200 и ту же задачу импорта, а не создаёт вторую.
+          schema:
+            type: string
+            minLength: 8
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateImportRequest"
+      responses:
+        "202":
+          description: Импорт принят, задача поставлена в очередь
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportRef"
+        "200":
+          description: Повтор запроса с тем же ключом — возвращается ранее созданная задача
+          headers:
+            Idempotent-Replay:
+              schema:
+                type: string
+                enum: ["true"]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportRef"
+        "400":
+          description: Ошибка валидации тела (нет ни ссылки, ни файлов; у файлов нет фото)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportError"
+        "403":
+          description: Доступ запрещён — нет активного подключения кабинета, токен истёк или недостаточно прав
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportError"
+        "422":
+          description: Ссылка не распознана как карточка Ozon/WB
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportError"
+
+  /imports/{id}:
+    get:
+      summary: Статус импорта
+      operationId: getImport
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Текущее состояние задачи импорта
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportJob"
+        "404":
+          description: Задача импорта не найдена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -273,3 +439,192 @@ components:
           type: integer
         wouldBeMinor:
           type: integer
+
+    ImportMarketplace:
+      type: string
+      enum: [ozon, wb]
+      description: Площадки с реализованным импортом. ym — фаза 3, вне MVP.
+
+    ConnectionStatus:
+      type: string
+      enum: [pending, active, expired, revoked]
+
+    CreateConnectionRequest:
+      type: object
+      required: [marketplace, credentialRef]
+      additionalProperties: false
+      properties:
+        marketplace:
+          $ref: "#/components/schemas/ImportMarketplace"
+        credentialRef:
+          type: string
+          minLength: 1
+          description: |
+            Имя переменной окружения / ключа секрет-менеджера, где лежит
+            креденшел площадки. Значение секрета в контракт и в БД НЕ попадает.
+
+    MarketplaceConnection:
+      type: object
+      required: [id, marketplace, status, credentialRef, createdAt]
+      properties:
+        id:
+          type: string
+        marketplace:
+          $ref: "#/components/schemas/ImportMarketplace"
+        status:
+          $ref: "#/components/schemas/ConnectionStatus"
+        credentialRef:
+          type: string
+        scope:
+          type: array
+          items:
+            type: string
+        lastCheckedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ImportSourceLink:
+      type: object
+      required: [kind, url]
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          const: link
+        url:
+          type: string
+          format: uri
+          description: Ссылка на карточку Ozon/WB. Площадка резолвится из URL.
+        marketplace:
+          $ref: "#/components/schemas/ImportMarketplace"
+          description: Необязательная подсказка; по умолчанию резолвится из url.
+
+    ImportSourceFiles:
+      type: object
+      required: [kind, title, photos]
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          const: files
+        title:
+          type: string
+          minLength: 1
+          maxLength: 300
+        description:
+          type: string
+        attributes:
+          type: object
+          additionalProperties: true
+          description: |
+            Характеристики товара. Схемы Ozon и WB принципиально разные,
+            поэтому свободный объект (в БД — JSONB), не фиксированная схема.
+        photos:
+          type: array
+          minItems: 1
+          items:
+            type: string
+          description: S3-ключи исходных фото (загружены в медиатеку отдельно). Бинарей в теле нет.
+
+    ImportSource:
+      type: object
+      required: [kind]
+      oneOf:
+        - $ref: "#/components/schemas/ImportSourceLink"
+        - $ref: "#/components/schemas/ImportSourceFiles"
+
+    CreateImportRequest:
+      type: object
+      required: [source]
+      additionalProperties: false
+      properties:
+        source:
+          $ref: "#/components/schemas/ImportSource"
+
+    ImportStatus:
+      type: string
+      enum: [queued, running, ready, failed]
+
+    ImportRef:
+      type: object
+      required: [id, status]
+      properties:
+        id:
+          type: string
+        status:
+          $ref: "#/components/schemas/ImportStatus"
+
+    ImportErrorCode:
+      type: string
+      enum:
+        [
+          unrecognized_link,
+          marketplace_unavailable,
+          insufficient_data,
+          access_denied,
+          validation_error,
+        ]
+
+    ImportError:
+      type: object
+      required: [error]
+      description: |
+        Коды ошибок импорта, разделённые по причине:
+        - unrecognized_link (422 на POST) — ссылка не распознана как карточка Ozon/WB;
+        - marketplace_unavailable (в ImportJob.failure) — площадка недоступна/таймаут при выгрузке;
+        - insufficient_data (в ImportJob.failure) — карточка есть, но данных для брифа не хватает
+          (нет фото / пустое название);
+        - access_denied (403 на POST или в ImportJob.failure) — нет активного подключения,
+          токен истёк/отозван, недостаточно прав;
+        - validation_error (400) — тело запроса невалидно.
+      properties:
+        error:
+          $ref: "#/components/schemas/ImportErrorCode"
+        reason:
+          type: string
+          description: |
+            Детализация причины. Примеры: access_denied → no_connection | token_expired |
+            insufficient_scope; insufficient_data → no_photos | empty_title.
+        message:
+          type: string
+        issues:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              message:
+                type: string
+
+    ImportJob:
+      type: object
+      required: [id, status, source, traceId, createdAt]
+      properties:
+        id:
+          type: string
+        status:
+          $ref: "#/components/schemas/ImportStatus"
+        source:
+          $ref: "#/components/schemas/ImportSource"
+        cardId:
+          type: string
+          description: Идентификатор импортированной карточки (product_cards.id) при status=ready.
+        failure:
+          $ref: "#/components/schemas/ImportError"
+          description: Причина при status=failed.
+        traceId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
