@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hermes.local/contracts/queues/publish.json",
+  "title": "publish.job",
+  "description": "Стадия [7] Публикация (записка §5.1, владелец A-31). MVP-путь: пакетный экспорт ZIP + XLSX-манифест под 400 SKU за раз. API-загрузка в карточку — фаза 3, вне MVP. Не платная очередь генерации: повторный экспорт не тарифицируется повторно (attempt_policy.billable=false на техническом ретрае), cost_estimate покрывает CDN/хранение (cost_targets.cost.other_compute_breakdown_rub.cdn_and_storage).",
+  "type": "object",
+  "required": [
+    "idempotency_key",
+    "trace_id",
+    "export_id",
+    "marketplace",
+    "preset_id",
+    "prompt_registry_version",
+    "cost_estimate",
+    "attempt_policy",
+    "items"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 8,
+      "description": "Повторная доставка не пересобирает архив и не создаёт дубль экспорта."
+    },
+    "trace_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Сквозная связка заказ → рендер → сборка → выдача."
+    },
+    "export_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Идентификатор пакета выдачи. Один export = одна площадка + один пресет-дериватив."
+    },
+    "marketplace": {
+      "type": "string",
+      "enum": ["ozon", "wb"],
+      "description": "Площадка назначения. ym — фаза 3, вне MVP."
+    },
+    "preset_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Идентификатор деривата из configs/master_format.yaml → derivatives[].id (ozon_cover_vertical | ozon_cover_square | wb_card). Числа формата (разрешение, fps, кодек, лимит веса) в payload НЕ копируются — они живут только в master_format.yaml."
+    },
+    "prompt_registry_version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Без неё состав роликов в архиве невоспроизводим."
+    },
+    "cost_estimate": {
+      "$ref": "#/$defs/money",
+      "description": "Стоимость экспорта (CDN/хранение), не генерации."
+    },
+    "attempt_policy": {
+      "$ref": "#/$defs/attemptPolicy",
+      "description": "Технический ретрай экспорта — billable=false: пересборка архива не стоит денег генерации."
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 400,
+      "description": "Строки манифеста. Включая rejected-строки: отклонённый SKU попадает в отчёт покрытия, а не исчезает из выдачи.",
+      "items": { "$ref": "#/$defs/exportItem" }
+    },
+    "export_timeout_ms": {
+      "type": "integer",
+      "minimum": 1000,
+      "maximum": 3600000,
+      "description": "Таймаут обязателен: зависшая архивация держит воркер."
+    }
+  },
+  "$defs": {
+    "money": {
+      "type": "object",
+      "required": ["amount_minor", "currency"],
+      "additionalProperties": false,
+      "properties": {
+        "amount_minor": { "type": "integer", "minimum": 0 },
+        "currency": { "type": "string", "enum": ["RUB", "USD"] }
+      }
+    },
+    "attemptPolicy": {
+      "type": "object",
+      "required": ["max_technical_retries", "billable"],
+      "additionalProperties": false,
+      "properties": {
+        "max_technical_retries": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "billable": { "type": "boolean" }
+      }
+    },
+    "exportItem": {
+      "type": "object",
+      "required": ["sku", "order_id", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "sku": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Артикул селлера (внешний id карточки). Он же — имя файла ролика в архиве."
+        },
+        "order_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Заказ, породивший ролик."
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Название товара — для читаемости манифеста."
+        },
+        "artifact_ref": {
+          "type": ["string", "null"],
+          "description": "Ключ S3 готового деривата. null — SKU отклонён, файла в архиве нет."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["ready", "rejected"],
+          "description": "ready — файл в архиве; rejected — файла нет, причина в reject_reason."
+        },
+        "reject_reason": {
+          "type": "string",
+          "enum": ["source_rejected", "qc_failed", "max_attempts_reached"],
+          "description": "Только при status=rejected. source_rejected — исходник отбракован на стадии [2]; qc_failed — не прошёл автовалидацию; max_attempts_reached — исчерпан потолок попыток (cost_targets.generation.max_attempts_per_sku)."
+        },
+        "attempts_used": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Потраченные попытки. Потолок — cost_targets.generation.max_attempts_per_sku, здесь не хардкодится."
+        }
+      }
+    }
+  }
+}

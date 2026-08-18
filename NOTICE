@@ -23,6 +23,15 @@ bits-ui (^2.18.1) — MIT License
 @internationalized/date (^3.8.1) — Apache License 2.0
   https://github.com/adobe/react-spectrum
 
+bullmq (^5.72.1) — MIT License
+  https://github.com/taskforcesh/bullmq
+
+ioredis (^5.10.1) — MIT License
+  https://github.com/redis/ioredis
+
+yaml (^2.9.0) — ISC License
+  https://github.com/eemeli/yaml
+
 --- Инструменты разработки (в поставку не входят) ---
 
 typescript — Apache License 2.0
