@@ -296,6 +296,88 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /exports:
+    post:
+      summary: Создать пакетный экспорт готовых роликов (ZIP + XLSX-манифест)
+      operationId: createExport
+      description: |
+        Стадия [7] Публикация, MVP-путь (записка §5.1, ADR-0005): пакетный экспорт
+        готовых роликов для ручной загрузки на площадку — API-загрузка видео
+        официально не документирована ни у Ozon, ни у WB. Операция асинхронная:
+        202 + id, статус — по GET /exports/{id}. Синхронного экспорта не существует.
+        Один экспорт = одна площадка + один пресет-дериватив из
+        configs/master_format.yaml → derivatives[].id.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: |
+            Ключ повтора. Повторный запрос с тем же ключом и тем же телом
+            возвращает 200 и тот же экспорт, а не пересобирает архив.
+          schema:
+            type: string
+            minLength: 8
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateExportRequest"
+      responses:
+        "202":
+          description: Экспорт принят, job поставлена в очередь
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportRef"
+        "200":
+          description: Повтор запроса с тем же ключом — возвращается ранее созданный экспорт
+          headers:
+            Idempotent-Replay:
+              schema:
+                type: string
+                enum: ["true"]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportRef"
+        "400":
+          description: Ошибка валидации тела (пустой список SKU, больше 400 артикулов, неизвестный пресет)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Пресет площадки не подтверждён и не может использоваться на боевой выдаче
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /exports/{id}:
+    get:
+      summary: Статус пакетного экспорта
+      operationId: getExport
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Текущее состояние экспорта; при status=ready содержит ссылки на архив и манифест
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportJob"
+        "404":
+          description: Экспорт не найден
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -621,6 +703,153 @@ components:
           description: Причина при status=failed.
         traceId:
           type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ExportMarketplace:
+      type: string
+      enum: [ozon, wb]
+      description: Площадки с реализованной выдачей. ym — фаза 3, вне MVP.
+
+    ExportStatus:
+      type: string
+      enum: [queued, running, ready, failed]
+
+    CreateExportRequest:
+      type: object
+      required: [marketplace, presetId, skus]
+      additionalProperties: false
+      properties:
+        marketplace:
+          $ref: "#/components/schemas/ExportMarketplace"
+        presetId:
+          type: string
+          description: |
+            Идентификатор деривата из configs/master_format.yaml → derivatives[].id
+            (ozon_cover_vertical | ozon_cover_square | wb_card). Числа формата
+            (разрешение, fps, кодек, лимит веса) в контракт не копируются — они
+            живут только в master_format.yaml.
+        skus:
+          type: array
+          minItems: 1
+          maxItems: 400
+          description: |
+            Артикулы селлера, для которых собрать экспорт. Пакет под 400 SKU за раз
+            (записка §5.1). Отклонённый SKU не исчезает — попадает в манифест
+            со статусом rejected и причиной.
+          items:
+            type: string
+            minLength: 1
+
+    ExportRef:
+      type: object
+      required: [id, status]
+      properties:
+        id:
+          type: string
+        status:
+          $ref: "#/components/schemas/ExportStatus"
+
+    ExportItemStatus:
+      type: string
+      enum: [ready, rejected]
+
+    ExportRejectReason:
+      type: string
+      enum: [source_rejected, qc_failed, max_attempts_reached]
+      description: |
+        source_rejected — исходник отбракован на стадии [2];
+        qc_failed — ролик не прошёл автовалидацию;
+        max_attempts_reached — исчерпан потолок попыток
+        (cost_targets.generation.max_attempts_per_sku).
+
+    ExportManifestRow:
+      type: object
+      required: [sku, status]
+      properties:
+        sku:
+          type: string
+          description: Артикул селлера.
+        title:
+          type: string
+        videoFile:
+          type: string
+          description: Имя файла ролика внутри ZIP. null — файла нет (SKU отклонён).
+        status:
+          $ref: "#/components/schemas/ExportItemStatus"
+        rejectReason:
+          $ref: "#/components/schemas/ExportRejectReason"
+        attemptsUsed:
+          type: integer
+          minimum: 0
+          description: Потраченные попытки. Потолок — cost_targets.generation.max_attempts_per_sku.
+
+    ExportSummary:
+      type: object
+      required: [total, ready, rejected]
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        ready:
+          type: integer
+          minimum: 0
+        rejected:
+          type: integer
+          minimum: 0
+
+    ExportArchive:
+      type: object
+      required: [ref, checksumSha256, sizeBytes]
+      properties:
+        ref:
+          type: string
+          description: Ключ объекта ZIP в S3 (путей в ФС и бинарей в контракте нет).
+        checksumSha256:
+          type: string
+        sizeBytes:
+          type: integer
+          minimum: 0
+        downloadUrl:
+          type: string
+          format: uri
+          description: Временная presigned-ссылка. Необязательна; срок жизни и выдача — реализация.
+
+    ExportJob:
+      type: object
+      required: [id, status, marketplace, presetId, promptRegistryVersion, summary, createdAt]
+      properties:
+        id:
+          type: string
+        status:
+          $ref: "#/components/schemas/ExportStatus"
+        marketplace:
+          $ref: "#/components/schemas/ExportMarketplace"
+        presetId:
+          type: string
+        promptRegistryVersion:
+          type: string
+          description: Без неё состав роликов в архиве невоспроизводим.
+        summary:
+          $ref: "#/components/schemas/ExportSummary"
+        manifest:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExportManifestRow"
+          description: Строки манифеста (SKU → файл ролика → статус) при status=ready.
+        manifestRef:
+          type: string
+          description: Ключ S3 XLSX-манифеста (SKU → файл ролика → статус) при status=ready.
+        archive:
+          $ref: "#/components/schemas/ExportArchive"
+          description: Готовый ZIP (videos/ + manifest.xlsx + README.txt) при status=ready.
+        failure:
+          $ref: "#/components/schemas/Error"
+          description: Причина при status=failed.
         createdAt:
           type: string
           format: date-time
