@@ -59,6 +59,15 @@ importers:
         specifier: workspace:*
         version: link:../../packages/domain
 
+  services/worker-import:
+    dependencies:
+      '@hermes/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
+
   services/worker-qc:
     dependencies:
       '@hermes/domain':

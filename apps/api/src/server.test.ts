@@ -153,3 +153,91 @@ describe('GET /health', () => {
     expect(res.json()).toEqual({ status: 'ok' });
   });
 });
+
+const ozonLinkBody = {
+  source: { kind: 'link', url: 'https://www.ozon.ru/product/krossovki-begovye-1234567890/' },
+};
+
+const postImport = (target: FastifyInstance, body: Payload, key = 'idem-imp-0001') =>
+  target.inject({
+    method: 'POST',
+    url: '/imports',
+    headers: { 'idempotency-key': key },
+    payload: body,
+  });
+
+describe('POST /imports', () => {
+  it('принимает ссылку на карточку Ozon и отвечает 202 + id', async () => {
+    const res = await postImport(app, ozonLinkBody);
+    expect(res.statusCode).toBe(202);
+    const body = res.json();
+    expect(body.id).toMatch(/^imp_/);
+    expect(body.status).toBe('queued');
+  });
+
+  it('повтор с тем же ключом не создаёт вторую задачу', async () => {
+    const first = await postImport(app, ozonLinkBody);
+    const second = await postImport(app, ozonLinkBody);
+    expect(second.statusCode).toBe(200);
+    expect(second.headers['idempotent-replay']).toBe('true');
+    expect(second.json().id).toBe(first.json().id);
+  });
+
+  it('тот же ключ с другим телом — это другой запрос', async () => {
+    const first = await postImport(app, ozonLinkBody);
+    const second = await postImport(
+      app,
+      { source: { kind: 'link', url: 'https://www.wildberries.ru/catalog/13579135/detail.aspx' } },
+      'idem-imp-0001',
+    );
+    expect(second.statusCode).toBe(202);
+    expect(second.json().id).not.toBe(first.json().id);
+  });
+
+  it('требует заголовок Idempotency-Key', async () => {
+    const res = await app.inject({ method: 'POST', url: '/imports', payload: ozonLinkBody });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('validation_error');
+  });
+
+  it('валидирует тело: у files нет фото → 400', async () => {
+    const res = await postImport(app, {
+      source: { kind: 'files', title: 'Без фото', photos: [] },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('validation_error');
+  });
+
+  it('не распознанную ссылку отклоняет кодом 422', async () => {
+    const res = await postImport(app, {
+      source: { kind: 'link', url: 'https://example.com/product/123456' },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error).toBe('unrecognized_link');
+  });
+
+  it('отсутствие активного подключения → 403 access_denied', async () => {
+    const noConnection = make({ resolveConnection: () => null });
+    const res = await postImport(noConnection, ozonLinkBody);
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({ error: 'access_denied', reason: 'no_connection' });
+  });
+});
+
+describe('GET /imports/:id', () => {
+  it('возвращает статус созданной задачи импорта', async () => {
+    const created = await postImport(app, ozonLinkBody);
+    const res = await app.inject({ method: 'GET', url: `/imports/${created.json().id}` });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      status: 'queued',
+      source: { kind: 'link', url: ozonLinkBody.source.url },
+    });
+    expect(res.json().traceId).toBeTruthy();
+  });
+
+  it('404 на неизвестной задаче', async () => {
+    const res = await app.inject({ method: 'GET', url: '/imports/imp_нет' });
+    expect(res.statusCode).toBe(404);
+  });
+});
