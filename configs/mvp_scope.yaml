@@ -20,6 +20,5 @@ confirmed_defaults:               # вопросы 3, 4, 5 — РЕШЕНО па
 
 open_questions:                   # остаются в TEC-35
   q6_pricing: provisional         # тарифная сетка 990/2490/6900 — не подтверждена
-  q7_data_source: service_selection  # решение Дениса: источник — сервис аналитики маркетплейсов;
-                                     # hermes-product выбирает ЛУЧШИЙ ПО ДАННЫМ (сравнение — задача в эпике)
+  q7_data_source: mpstats           # РЕШЕНО (2026-08-18, TEC-36+TEC-37): MPStats — единственный с топ-карточками Ozon + публичный REST API
   q8_config_format: de_facto_yaml # YAML уже применён в configs/; подтвердить явно
