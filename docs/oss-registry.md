@@ -10,6 +10,9 @@
 |---|---|---|---|---|---|---|---|
 | HTTP-сервер | `fastify` | ^5.1.0 | MIT | reuse | `apps/api` | скелет | 2026-08-17 |
 | Валидация входа | `zod` | ^3.23.8 | MIT | reuse | `apps/api`, `services/worker-import` | скелет, TEC-42 | 2026-08-17 |
+| UI-фреймворк | `svelte` | ^5.56.9 | MIT | reuse | `apps/web` | TEC-47 | 2026-08-18 |
+| Headless-компоненты | `bits-ui` | ^2.18.1 | MIT | reuse | `apps/web` | TEC-47 | 2026-08-18 |
+| Даты (peer-зависимость bits-ui) | `@internationalized/date` | ^3.8.1 | Apache-2.0 | reuse | `apps/web` | TEC-47 | 2026-08-18 |
 | Клиент очередей | `bullmq` | ^5.72.1 | MIT | reuse | `services/worker-assembly` | TEC-45 | 2026-08-18 |
 | Redis-клиент | `ioredis` | ^5.10.1 | MIT | reuse | `services/worker-assembly` | TEC-45 | 2026-08-18 |
 | Парсер YAML (конфиги) | `yaml` | ^2.9.0 | ISC | reuse | `services/worker-assembly`, `services/worker-qc` | TEC-45, TEC-46 | 2026-08-18 |
@@ -25,6 +28,13 @@
 | `eslint`, `typescript-eslint`, `@eslint/js` | MIT | линтер |
 | `tsx` | MIT | запуск TypeScript в dev |
 | `@types/node` | MIT | типы Node.js |
+| `@sveltejs/kit` | MIT | SvelteKit-каркас apps/web |
+| `@sveltejs/adapter-static` | MIT | статическая сборка PWA |
+| `@sveltejs/vite-plugin-svelte` | MIT | компиляция Svelte в Vite |
+| `@tailwindcss/vite` | MIT | Tailwind CSS 4 в Vite |
+| `tailwindcss` | MIT | стили и темизация |
+| `svelte-check` | MIT | проверка типов Svelte |
+| `vite` | MIT | сборка фронтенда |
 
 ## Внешние бинарные зависимости
 
