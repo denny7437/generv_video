@@ -5,12 +5,16 @@ import {
   buildIdempotencyKey,
   buildScriptJobPayload,
   getPreset,
+  parseImportLink,
   type Brief,
+  type ImportJob,
+  type ImportMarketplace,
   type Money,
 } from '@hermes/domain';
 import { checkBudget, type BudgetLimits } from '@hermes/budget-guard';
 import { type JobStore } from './store.js';
 import { mapQueueStateToJobStatus, type ScriptQueue } from './queue.js';
+import { createMemoryImportStore, type ImportStore } from './import-store.js';
 
 /** Контракт: contracts/openapi/api.yaml. Схема ниже обязана ему соответствовать. */
 const sceneSchema = z.object({
@@ -29,6 +33,28 @@ const createOrderSchema = z.object({
   scenes: z.array(sceneSchema).min(1).max(12),
 });
 
+/** Контракт: contracts/openapi/api.yaml → schemas ImportSource*. */
+const importSourceLinkSchema = z.object({
+  kind: z.literal('link'),
+  url: z.string().min(1),
+  marketplace: z.enum(['ozon', 'wb']).optional(),
+});
+
+const importSourceFilesSchema = z.object({
+  kind: z.literal('files'),
+  title: z.string().min(1).max(300),
+  description: z.string().optional(),
+  attributes: z.record(z.unknown()).optional(),
+  photos: z.array(z.string().min(1)).min(1),
+});
+
+const importSourceSchema = z.discriminatedUnion('kind', [
+  importSourceLinkSchema,
+  importSourceFilesSchema,
+]);
+
+const createImportSchema = z.object({ source: importSourceSchema });
+
 export interface BuildServerOptions {
   store: JobStore;
   queue: ScriptQueue;
@@ -37,6 +63,14 @@ export interface BuildServerOptions {
   costPerSceneMinor: number;
   allowUnverifiedPresets: boolean;
   maxTechnicalRetries?: number;
+  /** Хранилище задач импорта. По умолчанию — in-memory (замена на PostgreSQL вне scope). */
+  importStore?: ImportStore;
+  /** Мок-идентификатор продавца (из JWT по контракту E0, вне scope стадии [1]). */
+  sellerId?: string;
+  /** Мок-подключение кабинета: null — нет активного кабинета (контракт E0 вне scope). */
+  resolveConnection?: (marketplace: ImportMarketplace) => { id: string; status: string } | null;
+  /** Источник времени для timestamp импорта (тесты подменяют). */
+  now?: () => number;
 }
 
 const DEFAULT_MAX_TECHNICAL_RETRIES = 3;
@@ -44,6 +78,11 @@ const DEFAULT_MAX_TECHNICAL_RETRIES = 3;
 export function buildServer(opts: BuildServerOptions): FastifyInstance {
   const app = Fastify({ logger: false });
   const { store, queue } = opts;
+  const importStore = opts.importStore ?? createMemoryImportStore();
+  const sellerId = opts.sellerId ?? 'mock-seller';
+  const resolveConnection =
+    opts.resolveConnection ?? (() => ({ id: 'mock_connection', status: 'active' }));
+  const now = opts.now ?? (() => Date.now());
   const maxTechnicalRetries = opts.maxTechnicalRetries ?? DEFAULT_MAX_TECHNICAL_RETRIES;
 
   app.get('/health', async () => ({ status: 'ok' }));
@@ -220,7 +259,96 @@ export function buildServer(opts: BuildServerOptions): FastifyInstance {
     });
   });
 
+  app.post('/imports', async (request, reply) => {
+    const idempotencyHeader = request.headers['idempotency-key'];
+    if (typeof idempotencyHeader !== 'string' || idempotencyHeader.trim().length < 8) {
+      return reply.code(400).send({
+        error: 'validation_error',
+        reason: 'idempotency_key_required',
+        message: 'Заголовок Idempotency-Key обязателен, минимум 8 символов',
+      });
+    }
+
+    const parsed = createImportSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: 'validation_error',
+        message: 'Тело запроса невалидно',
+        issues: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+      });
+    }
+    const source = parsed.data.source;
+
+    const requestKey = requestIdempotencyKey(idempotencyHeader, request.body);
+    const existing = importStore.findByIdempotencyKey(requestKey);
+    if (existing) {
+      return reply
+        .code(200)
+        .header('idempotent-replay', 'true')
+        .send({ id: existing.id, status: existing.status });
+    }
+
+    let marketplace: ImportMarketplace | undefined;
+    let connectionId: string | undefined;
+    if (source.kind === 'link') {
+      const link = parseImportLink(source.url);
+      if (!link) {
+        return reply.code(422).send({
+          error: 'unrecognized_link',
+          message: 'Ссылка не распознана как карточка Ozon/WB',
+        });
+      }
+      marketplace = link.marketplace;
+      const connection = resolveConnection(marketplace);
+      if (!connection || connection.status !== 'active') {
+        return reply.code(403).send({
+          error: 'access_denied',
+          reason: connection ? 'connection_inactive' : 'no_connection',
+        });
+      }
+      connectionId = connection.id;
+    }
+
+    const ts = new Date(now()).toISOString();
+    const job: ImportJob = {
+      id: `imp_${randomUUID()}`,
+      sellerId,
+      connectionId,
+      marketplace,
+      source,
+      idempotencyKey: requestKey,
+      status: 'queued',
+      traceId: `trace_${randomUUID()}`,
+      createdAt: ts,
+      updatedAt: ts,
+    };
+    importStore.createJob(job);
+    return reply.code(202).send({ id: job.id, status: job.status });
+  });
+
+  app.get<{ Params: { id: string } }>('/imports/:id', async (request, reply) => {
+    const job = importStore.getJob(request.params.id);
+    if (!job) {
+      return reply.code(404).send({ error: 'import_not_found' });
+    }
+    return reply.code(200).send(toImportJobResponse(job));
+  });
+
   return app;
+}
+
+/** Отображение ImportJob в HTTP-ответ контракта (без внутренних полей). */
+function toImportJobResponse(job: ImportJob) {
+  return {
+    id: job.id,
+    status: job.status,
+    source: job.source,
+    ...(job.cardId === undefined ? {} : { cardId: job.cardId }),
+    ...(job.failure === undefined ? {} : { failure: job.failure }),
+    traceId: job.traceId,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+  };
 }
 
 /**

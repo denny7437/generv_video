@@ -81,15 +81,21 @@ CREATE INDEX spend_log_order_idx ON spend_log (order_id, created_at);
 CREATE INDEX spend_log_created_idx ON spend_log (created_at);
 
 -- «Подключение кабинета» — продавец авторизует сервис на одной площадке (ADR-0003).
+-- Механизм авторизации (OAuth / API-ключ) — ADR-0005, специфика флоу за адаптером.
 CREATE TABLE marketplace_connections (
     id               TEXT PRIMARY KEY,
     seller_id        TEXT        NOT NULL,
     marketplace      TEXT        NOT NULL CHECK (marketplace IN ('ozon', 'wb')),
+    -- Механизм авторизации: oauth (Ozon, code flow) или api_key (WB; Ozon по выбору).
+    auth_method      TEXT        NOT NULL DEFAULT 'api_key'
+                     CHECK (auth_method IN ('oauth', 'api_key')),
     -- Имя переменной окружения / ключа секрет-менеджера. Значение секрета не хранится.
     credential_ref   TEXT        NOT NULL,
     status           TEXT        NOT NULL DEFAULT 'pending'
                      CHECK (status IN ('pending', 'active', 'expired', 'revoked')),
     scope            TEXT[]      NOT NULL DEFAULT '{}',
+    -- Срок жизни access-токена (oauth). NULL для api_key — у ключа срока нет.
+    expires_at       TIMESTAMPTZ,
     last_checked_at  TIMESTAMPTZ,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
