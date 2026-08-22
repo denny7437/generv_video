@@ -1,65 +1,68 @@
-import type { Preset } from './types.js';
+import type { MarketplaceCode, Preset } from './types.js';
+import { DERIVATIVES, MASTER_FORMAT, TOLERANCES } from './presets.generated.js';
 
 /**
- * ВНИМАНИЕ. Значения ниже — рабочие заглушки, а не требования площадок.
- * Все пресеты помечены verified: false, потому что реальные лимиты
- * (длительность, вес, разрешение, безопасные поля) должны быть взяты
- * из официальной документации маркетплейса и подтверждены человеком.
+ * Пресеты боевой выдачи строятся из configs/master_format.yaml (через
+ * presets.generated.ts), поэтому числа формата — разрешение, длительность,
+ * fps, вес, кодек — в этом файле отсутствуют. Синхронность с конфигом
+ * проверяет CI (pnpm check:presets).
  *
- * Подтверждение пресета — отдельная задача Linear: проставить verified: true,
- * заполнить source (URL требований + дата проверки) и обновить тесты.
- * До этого assertPresetUsable() не пропустит пресет на боевую выдачу.
+ * Здесь остаются только два нерешаемых до отдельных задач значения:
+ *  - safeArea — безопасные поля интерфейса площадки (заглушка, ждёт
+ *    подтверждения официальных требований площадки, как и verified/source);
+ *  - контейнер mp4 — безопасный дефолт (H.264 в MP4), не «число-порог».
  */
-export const PRESETS: readonly Preset[] = [
-  {
-    id: 'wb-vertical-9x16',
-    marketplace: 'wb',
-    width: 1080,
-    height: 1920,
-    fps: 30,
-    minDurationMs: 5_000,
-    maxDurationMs: 60_000,
-    maxFileBytes: 50 * 1024 * 1024,
-    container: 'mp4',
-    videoCodec: 'h264',
-    audioCodec: 'aac',
-    safeArea: { top: 0.08, bottom: 0.14, left: 0.05, right: 0.05 },
+
+/** H.264 в MP4 — безопасный дефолт для всех площадок (platform_specs.formats). */
+const CONTAINER = 'mp4' as const;
+
+/**
+ * Заглушка безопасных полей. Реальные значения зависят от оверлеев конкретной
+ * площадки и будут подтверждены отдельной задачей верификации пресетов
+ * (verified: true + source), как и остальные поля ниже.
+ */
+const PLACEHOLDER_SAFE_AREA = { top: 0.08, bottom: 0.14, left: 0.05, right: 0.05 };
+
+const SOURCE_TODO = 'TODO: подтвердить по официальным требованиям площадки';
+
+/**
+ * Идентификатор дериватива однозначно кодирует площадку:
+ * ozon_* → ozon, wb_* → wb, yandex_* → ym. Маппинг — конвенция нейминга
+ * деривативов в master_format.yaml, а не число-порог.
+ */
+function marketplaceFor(id: string): MarketplaceCode {
+  if (id.startsWith('ozon')) return 'ozon';
+  if (id.startsWith('wb')) return 'wb';
+  if (id.startsWith('yandex')) return 'ym';
+  throw new Error(`unknown_derivative_prefix: ${id}`);
+}
+
+function toPreset(d: (typeof DERIVATIVES)[number]): Preset {
+  return {
+    id: d.id,
+    marketplace: marketplaceFor(d.id),
+    width: d.width,
+    height: d.height,
+    aspect: d.aspect,
+    fps: MASTER_FORMAT.fps,
+    // Нижняя граница длительности — из tolerances.duration_sec_min (8,2 с),
+    // верхняя — мастер-длительность (8,5 с). QC проверяет с допуском ±0,5 с.
+    minDurationMs: Math.round(TOLERANCES.durationSecMin * 1000),
+    maxDurationMs: MASTER_FORMAT.durationMs,
+    maxFileBytes: d.maxFileBytes,
+    container: CONTAINER,
+    videoCodec: MASTER_FORMAT.codec,
+    // master_format.audio = none: в MVP звука нет, аудиокодек отсутствует.
+    audioCodec: MASTER_FORMAT.audio === 'none' ? null : 'aac',
+    safeArea: PLACEHOLDER_SAFE_AREA,
     verified: false,
-    source: 'TODO: подтвердить по официальным требованиям площадки',
-  },
-  {
-    id: 'ozon-vertical-9x16',
-    marketplace: 'ozon',
-    width: 1080,
-    height: 1920,
-    fps: 30,
-    minDurationMs: 5_000,
-    maxDurationMs: 60_000,
-    maxFileBytes: 50 * 1024 * 1024,
-    container: 'mp4',
-    videoCodec: 'h264',
-    audioCodec: 'aac',
-    safeArea: { top: 0.08, bottom: 0.14, left: 0.05, right: 0.05 },
-    verified: false,
-    source: 'TODO: подтвердить по официальным требованиям площадки',
-  },
-  {
-    id: 'ym-vertical-9x16',
-    marketplace: 'ym',
-    width: 1080,
-    height: 1920,
-    fps: 30,
-    minDurationMs: 5_000,
-    maxDurationMs: 60_000,
-    maxFileBytes: 50 * 1024 * 1024,
-    container: 'mp4',
-    videoCodec: 'h264',
-    audioCodec: 'aac',
-    safeArea: { top: 0.08, bottom: 0.14, left: 0.05, right: 0.05 },
-    verified: false,
-    source: 'TODO: подтвердить по официальным требованиям площадки',
-  },
-];
+    source: SOURCE_TODO,
+  };
+}
+
+export const PRESETS: readonly Preset[] = DERIVATIVES.map(toPreset);
+
+export { DERIVATIVES, MASTER_FORMAT, TOLERANCES } from './presets.generated.js';
 
 export function getPreset(id: string): Preset {
   const preset = PRESETS.find((p) => p.id === id);

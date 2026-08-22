@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
   buildIdempotencyKey,
+  buildScriptJobPayload,
   getPreset,
   parseImportLink,
   type Brief,
@@ -11,7 +12,8 @@ import {
   type Money,
 } from '@hermes/domain';
 import { checkBudget, type BudgetLimits } from '@hermes/budget-guard';
-import { createMemoryStore, type Store } from './store.js';
+import { type JobStore } from './store.js';
+import { mapQueueStateToJobStatus, type ScriptQueue } from './queue.js';
 import { createMemoryImportStore, type ImportStore } from './import-store.js';
 
 /** Контракт: contracts/openapi/api.yaml. Схема ниже обязана ему соответствовать. */
@@ -54,27 +56,34 @@ const importSourceSchema = z.discriminatedUnion('kind', [
 const createImportSchema = z.object({ source: importSourceSchema });
 
 export interface BuildServerOptions {
-  store?: Store;
+  store: JobStore;
+  queue: ScriptQueue;
   limits: BudgetLimits;
   promptRegistryVersion: string;
   costPerSceneMinor: number;
   allowUnverifiedPresets: boolean;
-  now?: () => number;
+  maxTechnicalRetries?: number;
+  /** Хранилище задач импорта. По умолчанию — in-memory (замена на PostgreSQL вне scope). */
   importStore?: ImportStore;
   /** Мок-идентификатор продавца (из JWT по контракту E0, вне scope стадии [1]). */
   sellerId?: string;
   /** Мок-подключение кабинета: null — нет активного кабинета (контракт E0 вне scope). */
   resolveConnection?: (marketplace: ImportMarketplace) => { id: string; status: string } | null;
+  /** Источник времени для timestamp импорта (тесты подменяют). */
+  now?: () => number;
 }
+
+const DEFAULT_MAX_TECHNICAL_RETRIES = 3;
 
 export function buildServer(opts: BuildServerOptions): FastifyInstance {
   const app = Fastify({ logger: false });
-  const store = opts.store ?? createMemoryStore();
+  const { store, queue } = opts;
   const importStore = opts.importStore ?? createMemoryImportStore();
   const sellerId = opts.sellerId ?? 'mock-seller';
   const resolveConnection =
     opts.resolveConnection ?? (() => ({ id: 'mock_connection', status: 'active' }));
   const now = opts.now ?? (() => Date.now());
+  const maxTechnicalRetries = opts.maxTechnicalRetries ?? DEFAULT_MAX_TECHNICAL_RETRIES;
 
   app.get('/health', async () => ({ status: 'ok' }));
 
@@ -125,7 +134,7 @@ export function buildServer(opts: BuildServerOptions): FastifyInstance {
 
     // Идемпотентность на уровне HTTP: повтор запроса не создаёт вторую job.
     const requestKey = requestIdempotencyKey(idempotencyHeader, body);
-    const existing = store.findByIdempotencyKey(requestKey);
+    const existing = await store.findByIdempotencyKey(requestKey);
     if (existing) {
       return reply
         .code(200)
@@ -138,11 +147,15 @@ export function buildServer(opts: BuildServerOptions): FastifyInstance {
       currency: opts.limits.currency,
     };
     const orderId = `ord_${randomUUID()}`;
+    const traceId = `trace_${randomUUID()}`;
 
     const decision = checkBudget(
       costEstimate,
       opts.limits,
-      { orderSpentMinor: store.orderSpentMinor(orderId), daySpentMinor: store.daySpentMinor() },
+      {
+        orderSpentMinor: await store.orderSpentMinor(orderId),
+        daySpentMinor: await store.daySpentMinor(),
+      },
       'initial',
     );
     if (!decision.allowed) {
@@ -153,6 +166,18 @@ export function buildServer(opts: BuildServerOptions): FastifyInstance {
         wouldBeMinor: decision.wouldBeMinor,
       });
     }
+
+    // Ключ идемпотентности платной генерации: попадает в jobs.id (с префиксом)
+    // и в payload очереди как idempotency_key. Технический ретрай и повторная
+    // доставка сообщения не должны создавать вторую платную генерацию.
+    const jobLevelKey = buildIdempotencyKey({
+      orderId,
+      sceneIndex: 0,
+      presetId: preset.id,
+      promptRegistryVersion: opts.promptRegistryVersion,
+      attemptKind: 'initial',
+    });
+    const jobId = `job_${jobLevelKey}`;
 
     const brief: Brief = {
       orderId,
@@ -169,40 +194,65 @@ export function buildServer(opts: BuildServerOptions): FastifyInstance {
       language: body.language,
     };
 
-    const record = store.createJob(
-      {
-        jobId: `job_${buildIdempotencyKey({
-          orderId,
-          sceneIndex: 0,
-          presetId: preset.id,
-          promptRegistryVersion: opts.promptRegistryVersion,
-          attemptKind: 'initial',
-        })}`,
-        orderId,
+    const result = await store.createOrderAndJob({
+      orderId,
+      marketplace: body.marketplace,
+      presetId: preset.id,
+      productTitle: body.productTitle,
+      language: body.language,
+      voiceover: body.voiceover,
+      scenes: brief.scenes,
+      job: {
+        jobId,
         idempotencyKey: requestKey,
         status: 'queued',
         presetId: preset.id,
         promptRegistryVersion: opts.promptRegistryVersion,
         costEstimate,
-        createdAtMs: now(),
+        traceId,
+        billable: decision.billable,
       },
+    });
+
+    if (!result.created) {
+      return reply
+        .code(200)
+        .header('idempotent-replay', 'true')
+        .send({ jobId: result.job.jobId, orderId: result.job.orderId, status: result.job.status });
+    }
+
+    const payload = buildScriptJobPayload({
+      idempotencyKey: jobLevelKey,
+      traceId,
+      orderId,
+      presetId: preset.id,
+      promptRegistryVersion: opts.promptRegistryVersion,
+      costEstimate,
+      attemptPolicy: { maxTechnicalRetries, billable: decision.billable },
       brief,
-    );
+    });
+    await queue.publish(jobId, payload);
 
     return reply
       .code(202)
-      .send({ jobId: record.jobId, orderId: record.orderId, status: record.status });
+      .send({ jobId, orderId, status: result.job.status });
   });
 
   app.get<{ Params: { id: string } }>('/jobs/:id', async (request, reply) => {
-    const job = store.getJob(request.params.id);
+    const job = await store.getJob(request.params.id);
     if (!job) {
       return reply.code(404).send({ error: 'job_not_found' });
     }
+
+    // Живой статус из BullMQ — приоритетнее БД; если очереди уже нет записи
+    // (например, job удалён после завершения), остаётся статус из БД.
+    const queueState = await queue.getState(job.jobId);
+    const status = mapQueueStateToJobStatus(queueState) ?? job.status;
+
     return reply.code(200).send({
       jobId: job.jobId,
       orderId: job.orderId,
-      status: job.status,
+      status,
       presetId: job.presetId,
       promptRegistryVersion: job.promptRegistryVersion,
       costEstimate: job.costEstimate,
