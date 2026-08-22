@@ -123,6 +123,18 @@ importers:
         specifier: ^2.9.0
         version: 2.9.0
 
+  services/worker-render:
+    dependencies:
+      '@hermes/budget-guard':
+        specifier: workspace:*
+        version: link:../../packages/budget-guard
+      '@hermes/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
+
 packages:
 
   '@esbuild/aix-ppc64@0.21.5':

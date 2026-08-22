@@ -10,6 +10,7 @@ export default defineConfig({
       '@hermes/budget-guard': r('./packages/budget-guard/src/index.ts'),
       '@hermes/worker-assembly': r('./services/worker-assembly/src/index.ts'),
       '@hermes/worker-qc': r('./services/worker-qc/src/index.ts'),
+      '@hermes/worker-render': r('./services/worker-render/src/index.ts'),
       '@hermes/worker-import': r('./services/worker-import/src/index.ts'),
     },
   },

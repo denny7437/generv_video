@@ -15,7 +15,7 @@
 | Даты (peer-зависимость bits-ui) | `@internationalized/date` | ^3.8.1 | Apache-2.0 | reuse | `apps/web` | TEC-47 | 2026-08-18 |
 | Клиент очередей | `bullmq` | ^5.72.1 | MIT | reuse | `services/worker-assembly` | TEC-45 | 2026-08-18 |
 | Redis-клиент | `ioredis` | ^5.10.1 | MIT | reuse | `services/worker-assembly` | TEC-45 | 2026-08-18 |
-| Парсер YAML (конфиги) | `yaml` | ^2.9.0 | ISC | reuse | `services/worker-assembly`, `services/worker-qc` | TEC-45, TEC-46 | 2026-08-18 |
+| Парсер YAML (конфиги) | `yaml` | ^2.9.0 | ISC | reuse | `services/worker-assembly`, `services/worker-qc`, `services/worker-render` | TEC-45, TEC-46, TEC-44 | 2026-08-18 |
 
 ## Инструменты разработки
 
