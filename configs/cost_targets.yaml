@@ -1,56 +1,57 @@
 # cost_targets.yaml — единственный источник стоимостных допущений.
 # Хардкод любых цен и лимитов в коде и в промптах запрещён.
-# Параметры формата вынесены в master_format.yaml (владелец A-30) и здесь не дублируются.
-# Источник: пояснительная записка «Нейровидео» v1.1 от 17.08.2026, раздел 3.4.
-# Владелец: A-20 (hermes-product). Изменения утверждает только человек.
-version: 1.1
+# Параметры формата (длительность, разрешение, fps) вынесены в master_format.yaml
+# (владелец A-30) и здесь не дублируются.
+# Источник: пояснительная записка «Нейровидео» v2.0 от 22.08.2026, разделы 3.2–3.5, 6 (G4), Приложение А.
+# Владелец: A-20 (hermes-product). Изменения утверждает только человек (§7.6).
+version: 2.0
 owner: A-20
-approved_by: "Денис Нагаев"   # подтверждено человеком
-approved_at: "2026-08-17"
+status: provisional            # предложение A-20; утверждает человек (вопрос §9 q6)
+approved_by: null              # заполняется человеком; до этого — не утверждено
+approved_at: null
 
-assumptions:               # входные данные модели, не результат работы агентов
-  fx_usd_rub: 80.0                    # пересматривать ежемесячно; отклонение >10 % -> пересчёт A-20
-  arpu_rub_month: 2031.0
-  plan_limits: {start: 8, pro: 25, business: 80}
-  plan_mix:    {start: 0.6, pro: 0.3, business: 0.1}
-  limit_utilization: 0.68             # 0.6 типовой x 0.8 + 1.0 тяжёлый x 0.2
-  videos_per_user_month: 13.8         # = 20.3 лимита x 0.68
-  churn_monthly: 0.12                 # status: provisional, цель 0.09
-  cac_rub: 3000.0                     # status: provisional, цель 2500
-  acquiring_and_tax: 0.095            # 3.5 % эквайринг + 6 % УСН
-  support_rub_month: 120.0
+assumptions:                   # входные данные модели, не результат работы агентов
+  fx_usd_rub: 80.0             # §3.2; пересматривать ежемесячно; отклонение >10 % → пересчёт A-20
+  # B2C/B2B-параметры спроса (churn / CAC / конверсия) — входные данные человека (§7.6).
+  # В v1.1 они считались под подписку селлеров; для пивота требуют нового сбора (§9 q5)
+  # и здесь не задаются до ответа человека.
 
-cost:
-  cogs_per_accepted_video_target_rub: 47.0
-  cogs_per_accepted_video_max_rub: 48.0      # ЖЁСТКИЙ ПОТОЛОК, есть запас к цели
-  cogs_alert_threshold_rub: 44.0             # предупреждение в мониторинге
-  other_compute_breakdown_rub:               # в сумме 4.0 руб на принятый ролик
+cost:                          # себестоимость принятого ролика (записка §3.2, §3.4)
+  # Формула §3.2: стоимость_попытки = длительность_с × цена_модели_$_за_сек × fx_usd_rub;
+  #                COGS = стоимость_попытки × попыток_на_принятый + прочий_compute.
+  # Длительность (8 с B2C / 15 с B2B) — параметр формата, живёт в master_format.yaml (зона A-30).
+  cogs_b2c_budget_target_rub: 42.0    # §3.4; частник, 8 с, бюджет. Проверка: 8×0,030×80×2,0 + 4,0 = 42,4 → цель 42,0
+  cogs_b2b_premium_target_rub: 364.0  # §3.4; дилер, 15 с, премиум. Проверка: 15×0,150×80×2,0 + 4,0 = 364,0
+  other_compute_breakdown_rub:        # §3.2; в сумме ~4,0 ₽ на принятый при 2,0 попытках
     source_selection_and_segmentation: {value: 0.8, per: accepted}
-    vlm_validation:                   {value: 1.0, per: attempt}   # x1.6 = 1.6
+    vlm_validation:                   {value: 1.0, per: attempt}   # ×2,0 = 2,0 на принятый
     assembly_upscale_encode:          {value: 1.0, per: accepted}
     cdn_and_storage:                  {value: 0.6, per: accepted}
 
 generation:
-  attempts_per_accepted_target: 1.6
-  attempts_per_accepted_max: 1.8
-  attempts_enforced_from_phase: 2            # до фазы 2 порог не блокирует
-  max_attempts_per_sku: 4                    # выше — отказ с причиной, SKU в отчёт селлеру
-  coverage_min: 0.90                         # доля SKU golden set с принятым роликом
-  premium_share_max: 0.10
-  budget_model_price_usd_per_sec_weighted_max: 0.030   # средневзвешенно по миксу
-  budget_model_price_usd_per_sec_single_max:   0.045   # потолок на отдельный вызов
-  premium_model_price_usd_per_sec_weighted_max: 0.150
-  premium_model_price_usd_per_sec_single_max:   0.200
-  min_budget_providers: 2                    # резервирование обязательно
-  self_host_traffic_share_max: 0.80          # 20 % бюджетного трафика всегда на API
+  attempts_per_accepted_target: 2.0   # §3.3; гипотеза, проверяется ручным замером G1 (10–15 машин)
+  attempts_per_accepted_max: 2.2      # §3.3; замер > 2,2 → пересматривать цену/позиционирование, не архитектуру
+  attempts_enforced_from_phase: 2     # §3.4; до фазы 2 порог не блокирует
+  max_attempts_per_vehicle: 4         # §3.4; потолок на автомобиль; выше — отказ с причиной
+  coverage_min: 0.90                  # §3.4; доля машин golden set с принятым роликом; публикуется всегда в паре с попытками
+  premium_share_max: 0.10             # §3.4; B2C-частник не должен молча уезжать в премиум
+  budget_model_price_usd_per_sec_weighted_max: 0.030   # §3.4; средневзвешенно по миксу (§3.2: бюджет $0,03/сек)
+  budget_model_price_usd_per_sec_single_max:   0.045   # §3.4; потолок на отдельный вызов
+  premium_model_price_usd_per_sec_weighted_max: 0.150  # §3.4; §3.2: премиум $0,15/сек
+  premium_model_price_usd_per_sec_single_max:   0.200  # §3.4; потолок на отдельный вызов
+  min_budget_providers: 2             # §3.4; ≥ 2 поставщика на бюджетном контуре, резервирование обязательно
+  self_host_traffic_share_max: 0.80   # §3.4; 20 % бюджетного трафика всегда на API (гейт self-host — §3.5, решение в ADR)
 
 unit_economics:
-  # Пороги производны от оттока и CAC. Проверять формулой, а не константой.
-  contribution_min_formula: "3 * assumptions.cac_rub * assumptions.churn_monthly"
-  contribution_margin_min: 0.50
-  ltv_cac_min: 3.0                           # бизнес-гейт G4, не инженерный
-  cac_payback_months_max: 6.0
+  # Бизнес-гейты G4 (записка §6) — не инженерные пороги и не подписочные допущения v1.1.
+  # Точка безубыточности и порог платящих не переносятся из v1.1 (§3.6: формула завязана на
+  # подписочный ARPU, которого у частника нет) и считаются заново после ответа человека на
+  # §9 q1–q2 (монетизация B2C/B2B). Порог платящих в конфиге не задаётся.
+  contribution_margin_min: 0.50       # §6 G4; маржа вклада ≥ 50 %
+  ltv_cac_min: 3.0                    # §6 G4; LTV/CAC ≥ 3 (когорта 3 мес)
+  cac_payback_months_max: 6.0         # §6 G4; окупаемость CAC ≤ 6 мес
+  churn_monthly_max: 0.09             # §6 G4; отток ≤ 9 %/мес
 
 forbidden_models:
-  - id: "sora-2"                             # API отключается 24.09.2026
+  - id: "sora-2"                      # Приложение А; API отключается 24.09.2026
   - id: "sora-2-pro"
