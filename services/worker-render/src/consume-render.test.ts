@@ -27,7 +27,7 @@ const job: RenderJobPayload = {
   idempotencyKey: 'abcd1234abcd1234',
   traceId: 'trace-1',
   orderId: 'order-1',
-  presetId: 'wb-vertical-9x16',
+  presetId: 'wb_card',
   promptRegistryVersion: 'v1',
   costEstimate: { amountMinor: 1800, currency: 'RUB' },
   attemptPolicy: { maxTechnicalRetries: 3, billable: true },
@@ -64,14 +64,14 @@ describe('консьюмер очереди render', () => {
 
     expect(outcome).toEqual({
       kind: 'rendered',
-      clipRef: 'clips/wb-vertical-9x16/0.mp4',
+      clipRef: 'clips/wb_card/0.mp4',
       modelId: 'mock-budget',
       attempt: 2,
     });
     expect(recordTelemetry).toHaveBeenCalledWith({
       modelId: 'mock-budget',
       durationMs: 5000,
-      resolution: { width: 1080, height: 1920 },
+      resolution: { width: 1152, height: 1536 },
       costMinor: 1800,
       attempt: 2,
     });

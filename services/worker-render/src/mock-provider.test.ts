@@ -5,7 +5,7 @@ import { MockProvider } from './mock-provider.js';
 import { ProviderError, type GenerateRequest } from './provider.js';
 
 const model: ModelRef = { id: 'mock-budget', priceUsdPerSec: 0.045 };
-const preset = getPreset('wb-vertical-9x16');
+const preset = getPreset('wb_card');
 const request: GenerateRequest = {
   scene: { index: 0, durationMs: 5000, sourceRefs: ['s3://card/photo.jpg'] },
   preset,
