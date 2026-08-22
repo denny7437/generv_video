@@ -1,88 +1,64 @@
 # platform_specs.yaml — технические требования площадок в машиночитаемом виде.
-# Источник: пояснительная записка «Нейровидео» v1.1 от 17.08.2026, раздел 4.1 (по официальным справкам).
-# Владелец: A-12 (hermes-product). Каждое значение подлежит верификации по первоисточнику
-# с датой проверки — до верификации verified: false.
-version: 1.1
+# Источник: пояснительная записка «Нейровидео» v2.0 от 22.08.2026, раздел 4.1.
+# Владелец: A-12 (hermes-product). Каждое значение — с источником и датой проверки.
+version: 2.0
 owner: A-12
 
 platforms:
-  ozon_cover:                       # видеообложка Ozon
-    formats: [mp4, mov]
-    duration_sec: {min: 8, max: 30}       # «From 8 to 30 seconds»
-    resolution_long_side_px: {min: 1080, max: 1920}  # «From 1080 to 1920px on the largest side»
-    aspect:
-      clothing_home_garden: "3:4"        # «Vertical 3:4 for Clothing and House & Garden»
-      other_categories: "1:1"            # «Square 1:1 for other categories»
-      note: "16:9 и 9:16 сильно обрезаются"
-    max_size_mb: 20                      # «Max 20 MB»
-    fps: null                            # официально не указано
-    per_card: 1                          # вместо главного фото
-    first_frame_sharp: true              # «first video frame is sharp — показывается, пока грузится видео»
-    must_read_without_sound: true        # «content should be clear without an audio track»
-    verified: true
-    source: "https://docs.ozon.ru/global/en/products/requirements/media/videocover-requirements/"
-    checked_at: "2026-08-18"
-    source_note: "сверено по snapshot web.archive.org от 2024-10-14 (живая страница закрыта бот-защитой); нужна живая перепроверка на seller-edu.ozon.ru"
+  autoru:
+    video:
+      per_listing: 1
+      upload_method: "по ссылке (Rutube / VK Видео / VK Клипы), не прямой файл"
+      note: "для мотоциклов и коммерческого транспорта — только в мобильном приложении"
+      content_rule: "на видео должен быть только автомобиль, который продаётся"
+      max_size_mb: null             # лимит не опубликован явно (сниппет «5 ГБ» — требует перепроверки)
+      verified: true
+      source: "https://yandex.ru/support/autoru/ru/car-rules-ads"
+      checked_at: "2026-08-22"
+    photos:
+      max_count: 40
+      format: [jpg]
+      aspect: "4:3"
+      max_size_mb: 20
+      min_width_px: 900
+    moderation:
+      note: "модераторы могут заблокировать объявление или личный кабинет за несоблюдение правил"
 
-  ozon_gallery:                     # видео в галерее Ozon
-    formats: [mp4, mov]
-    duration_sec: {min: 8, max: 300}      # «From 8 seconds to 5 minutes»
-    resolution_long_side_px: {min: 1080, max: 1920}  # «From 1080 to 1920 px on the larger side»
-    codecs:
-      video: [mpeg-1, mpeg-2, vc-1, h264, hevc, vp8, vp9, mpeg-4, mpeg-4-part-2, mpeg-4-part-3]
-    max_size_mb: 100                      # при загрузке с компьютера; по ссылке — до 5 ГБ
-    per_card: 5                           # «the allowed volume for downloading is 5 videos»
-    verified: true
-    source: "https://docs.ozon.ru/global/en/products/requirements/media/video-requirements/"
-    checked_at: "2026-08-18"
-    source_note: "сверено по snapshot web.archive.org от 2025-01-24 (живая страница закрыта бот-защитой); нужна живая перепроверка на seller-edu.ozon.ru"
+  avito:
+    video:
+      formats: [mp4, mov, hevc, webm]
+      duration_sec: {min: 5, max: 180, recommended_max: 60}
+      max_size_mb: 500
+      orientation: "вертикальная"
+      note: "в категории «Автомобили» для загрузки видео нужен тариф"
+      benefit: "продавцы с видео получают в среднем +15% заказов с доставкой"
+      verified: true
+      source: "https://www.avito.ru/business/tools/upload_video"
+      checked_at: "2026-08-22"
+    photos:
+      format: [jpg, png, gif]
+      max_size_mb: 25
 
-  wildberries:
-    formats: [mov, mp4]
-    duration_sec: {min: null, max: 180}      # «продолжительность — не больше 3 минут»
-    resolution_both_sides_px: {min: 720, max: 1920}  # ширина и высота кадра — от 720 до 1920 px
-    max_size_mb: 50                          # «размер файла — не больше 50 МБ»
-    codecs: {video: [h264, mpeg-4], audio: [aac, mp3], audio_required: false}
-    fps: {min: 25, max: 30}                  # «частота кадров — 25–30 в секунду»
-    per_card: 1                              # «количество — максимум 1»
+  drom:
+    video_supported: false          # КРИТИЧНО: видео в объявлении не поддерживается
+    note: "в объявлении только фото в формате jpeg"
+    implication: "ролик для Дром неприменим в объявлении — только как сторонняя реклама"
     verified: true
-    source: "https://seller.wildberries.ru/instructions/ru/ru/material/how-to-create-card"
-    checked_at: "2026-08-18"
-
-  yandex_market:                    # фаза 3, вне MVP
-    phase: 3
-    formats: [mp4, webm, mov, qt, flv, avi]   # + «и другие» форматы из библиотеки FFmpeg
-    duration_sec: {min: null, max: 1200, recommended_max: 60}   # до 20 мин, реком. до 1 мин
-    resolution_long_side_px: {min: 1080, max: 1920}
-    max_size_mb: 100
-    fps: {min: 20, max: 30}
-    per_card: 6
-    product_min_screen_share: 0.667  # товар не менее 2/3 экрана в большинстве кадров
-    subtitles_required_if_speech: true
-    notes:                           # доп. требования из первоисточника
-      - "один видеопоток"
-      - "без HDR"
-      - "сумма сторон >= 2048 px повышает балл качества контента (рекомендация, не лимит)"
-      - "контент должен восприниматься без звука"
-    verified: true
-    source: "https://yandex.ru/support/marketplace/ru/assortment/create/main-fields/video"
-    checked_at: "2026-08-17"
-
-sanctions:                          # разница санкций определяет приоритеты валидатора
-  ozon:
-    rejected_video: "карточка НЕ блокируется — товар уходит во вкладку «Ошибки»"
-    false_info_penalty_points: {first: 200, months: 2, repeat: 400, repeat_months: 4, cabinet_block_at: 1200}
-    risk: moderate
-  wildberries:
-    rejected_media: "карточка товара БЛОКИРУЕТСЯ"
-    risk: high
-    validator_mode: strict          # для WB валидатор работает в строгом режиме
+    source: "https://www.drom.ru/faq/toyota/corolla_levin/Dobriy-vecher-Podskazhite-kak-dobavit-video-v-obyavlenie-223958.html"
+    checked_at: "2026-08-22"
 
 legal:
-  fz_289:                           # платформенная экономика
-    in_force_from: "2026-10-01"
-    note: "проверка достоверности карточек; выходить на рынок уже соответствующими"
-  ai_labeling:
+  fz_advertising:                   # ФЗ «О рекламе» 38-ФЗ от 13.03.2006
+    in_force: "2006-07-01"
+    key_articles:
+      art5: "добросовестность и достоверность рекламы"
+      art7: "товары, реклама которых не допускается"
+      art21: "реклама алкогольной продукции"
+      art28: "реклама финансовых услуг (кредит/рассрочка/лизинг)"
+  ad_labeling:                      # маркировка интернет-рекламы
+    in_force_from: "2022-09-01"
+    note: "пометка «реклама» + рекламодатель + токен ERID; учёт через ОРД → ЕРИР (Роскомнадзор)"
+  ai_labeling:                      # маркировка ИИ-контента
     adopted: "2026-07-08"
     in_force_from: "2027-03-01"
     user_labeling: voluntary

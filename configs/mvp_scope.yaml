@@ -1,24 +1,31 @@
-# mvp_scope.yaml — продуктовые решения человека по разделу 9 записки.
+# mvp_scope.yaml — продуктовые решения человека по разделу 9 записки v2.0.
 # Владелец: A-10 (hermes-product). Решения принимает ТОЛЬКО Денис; агенты читают.
-version: 1.0
+version: 2.0
 decided_by: "Денис Нагаев"
-decided_at: "2026-08-17"
+decided_at: "2026-08-22"
 
-categories:                       # вопрос 1 — РЕШЕНО
-  - {id: clothing,     name: "Одежда",     ozon_cover_aspect: "3:4"}
-  - {id: home_garden,  name: "Дом и сад",  ozon_cover_aspect: "3:4"}
-  - {id: electronics,  name: "Электроника", ozon_cover_aspect: "1:1"}   # квадратный дериват обязателен
+vehicle_types:                    # вопрос 4 — РЕШЕНО: типы кузова вместо категорий товаров
+  - {id: sedan_hatch,   name: "Седан / лифтбек / хэтчбек", body: [sedan, liftback, hatchback]}
+  - {id: crossover_suv, name: "Кроссоверы и SUV",            body: [suv, crossover]}
+  - {id: business_premium, name: "Бизнес и премиум",          note: "высокая цена ошибки — ядро моата правила 4.4"}
+
+brand_tiers:                      # марка/класс — атрибут ролика, не отдельная категория
+  - {id: mass,    name: "Масс-маркет (Lada, Kia, Hyundai, Toyota, VW)"}
+  - {id: premium, name: "Премиум (BMW, Mercedes, Audi, Lexus)"}
 
 platform_priority:                # вопрос 2 — РЕШЕНО
-  first: ozon                     # мягче санкции: отклонение → вкладка «Ошибки», карточка не блокируется
-  second: wildberries             # подключается со строгим режимом валидатора (санкция — блокировка карточки)
+  first: autoru                   # 1 видео по ссылке (Rutube/VK), до 40 фото — крупнейший каталог легковых
+  second: avito                   # вертикальное видео; в категории «Автомобили» нужен тариф
+  note: "Дром: видео в объявлении не поддерживается (только фото jpeg) — не площадка публикации"
 
-confirmed_defaults:               # вопросы 3, 4, 5 — РЕШЕНО пакетом
-  duration_8s: true               # значение живёт в master_format.yaml → generation.duration_sec
-  self_host_gate: true            # формулировка записки §3.5: замер в фазе 2, порог ≤ 0.7 × цены API при утилизации ≥ 60 %
-  opex_phase2_cap: true           # значение живёт в finance/opex.yaml → phase2_cap_rub
+input:                            # вход продукта
+  photos: 6                       # 6 фото объявления — решение продукта (без API-привязки)
+  no_api: true                    # автопубликации нет; выдача файла + инструкция, пользователь загружает сам
+  entry: "загрузка фото пользователем; марка/модель/кузов — из бланка, не из распознавания"
 
-open_questions:                   # остаются в TEC-35
-  q6_pricing: provisional         # тарифная сетка 990/2490/6900 — не подтверждена
-  q7_data_source: mpstats           # РЕШЕНО (2026-08-18, TEC-36+TEC-37): MPStats — единственный с топ-карточками Ozon + публичный REST API
-  q8_config_format: de_facto_yaml # YAML уже применён в configs/; подтвердить явно
+open_questions:                   # вопросы §9 v2.0 — требуют ответа Дениса
+  q1_pricing_b2c: open            # монетизация B2C-частника: pay-per-video vs пакет (подписка не ложится на 1 авто)
+  q2_pricing_b2b: open            # B2B-дилер: bulk-пакет / подписка; включать ли премиум-опцию с первого дня
+  q3_duration: open               # 8 с (B2C) / 15 с (B2B) — подтверждение; влияет на COGS линейно
+  q5_data_source: open            # источник топовых объявлений авто для A-11 + факт цены «видео для продажи авто»
+  q6_cost_targets_approval: open  # cost_targets.yaml v2.0 (записка §3.4) — утверждает человек (§7.6)

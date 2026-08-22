@@ -28,6 +28,12 @@
       "description": "Имя адаптера. 'mock' обязателен для тестов и CI: живые ключи в тестах не используются.",
       "default": "mock"
     },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "Номер попытки генерации этой сцены, начиная с 1. Пишется в телеметрию (метрика «число попыток на принятый ролик»)."
+    },
     "scene": {
       "type": "object",
       "required": ["index", "duration_ms", "source_refs"],
