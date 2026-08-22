@@ -2,11 +2,14 @@
 """
 Гейт конфигов проекта Нейровидео.
 
-Проверяет три вещи, нарушение любой из которых записка объявляет блокирующим дефектом:
+Проверяет согласованность конфигов, нарушение любой из которых записка объявляет блокирующим дефектом:
 1. Все пять конфигов существуют и парсятся как YAML.
-2. Запрещённые модели (sora-2/sora-2-pro) не упоминаются в коде сервисов и пакетов.
-3. Значение живёт ровно в одном файле: ключевые числа cost_targets и master_format
+2. Обязательный минимум структуры (forbidden_models, ключевые секции).
+3. Запрещённые модели (sora-2/sora-2-pro) не упоминаются в коде сервисов и пакетов.
+4. Значение живёт ровно в одном файле: ключевые числа cost_targets и master_format
    не задублированы между конфигами.
+5. Сгенерированные пресеты (packages/domain/src/presets.generated.ts) синхронны
+   с master_format.yaml — числа формата не «заморожены» в коде после правки конфига.
 
 Проверка approved_by здесь НЕ выполняется: непустой approved_by — условие гейта G1,
 а не каждого CI-прогона (иначе CI красный до утверждения человеком).
@@ -16,6 +19,8 @@ import re
 import sys
 
 import yaml
+
+import generate_presets
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CONFIGS = {
@@ -81,6 +86,20 @@ ct_text = CONFIGS["cost_targets"].read_text(encoding="utf-8") if CONFIGS["cost_t
 for marker in ("768x1024", "1152x1536", "duration_sec", "fps:"):
     if marker in ct_text:
         fail(f"cost_targets дублирует параметр формата «{marker}» — он живёт в master_format.yaml")
+
+# 5. Синхронность сгенерированных пресетов с master_format.yaml.
+# Тот же генератор, что и pnpm generate:presets, — чтобы «числа в коде отсутствуют»
+# оставалось правдой и после правки конфига.
+if "master_format" in data:
+    generated = generate_presets.render(data["master_format"])
+    target = generate_presets.TARGET
+    if not target.is_file() or target.read_text(encoding="utf-8") != generated:
+        fail(
+            f"{target.relative_to(ROOT)} расходится с configs/master_format.yaml — "
+            "запустите «pnpm generate:presets» и закоммитьте результат"
+        )
+    else:
+        print(f"OK   {target.relative_to(ROOT)} синхронен с master_format.yaml")
 
 if failed:
     print(f"\n{failed} проблем(а) в конфигах")
