@@ -12,6 +12,8 @@ export default defineConfig({
       '@hermes/worker-qc': r('./services/worker-qc/src/index.ts'),
       '@hermes/worker-render': r('./services/worker-render/src/index.ts'),
       '@hermes/worker-import': r('./services/worker-import/src/index.ts'),
+      '@hermes/worker-prepare': r('./services/worker-prepare/src/index.ts'),
+      '@hermes/worker-publish': r('./services/worker-publish/src/index.ts'),
     },
   },
   test: {

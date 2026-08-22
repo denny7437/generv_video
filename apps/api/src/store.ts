@@ -1,10 +1,11 @@
-import type { Brief, Money } from '@hermes/domain';
+import type { MarketplaceCode, Money, Scene } from '@hermes/domain';
 
 /**
- * Хранилище в памяти — временная заглушка на время сборки скелета.
- * Заменяется на PostgreSQL + публикацию в BullMQ отдельной задачей Linear
- * (контракты: contracts/db/schema.sql, contracts/queues/script.json).
- * Границы интерфейса выбраны так, чтобы замена не задела HTTP-слой.
+ * Порт хранилища заказов и jobs. apps/api зависит от этого интерфейса,
+ * а не от конкретной СУБД: HTTP-слой тестируется на in-memory тестовом
+ * двойнике, боевая реализация — PostgresStore (contracts/db/schema.sql).
+ *
+ * Все методы асинхронные: Postgres — асинхронный источник.
  */
 
 export type JobStatus = 'queued' | 'running' | 'qc_failed' | 'ready' | 'failed';
@@ -12,41 +13,50 @@ export type JobStatus = 'queued' | 'running' | 'qc_failed' | 'ready' | 'failed';
 export interface JobRecord {
   jobId: string;
   orderId: string;
+  /** HTTP-ключ повтора (Idempotency-Key заголовок + тело). */
   idempotencyKey: string;
   status: JobStatus;
   presetId: string;
   promptRegistryVersion: string;
   costEstimate: Money;
-  createdAtMs: number;
 }
 
-export interface Store {
-  findByIdempotencyKey(key: string): JobRecord | undefined;
-  createJob(record: JobRecord, brief: Brief): JobRecord;
-  getJob(jobId: string): JobRecord | undefined;
-  orderSpentMinor(orderId: string): number;
-  daySpentMinor(): number;
-}
-
-export function createMemoryStore(): Store {
-  const byKey = new Map<string, JobRecord>();
-  const byId = new Map<string, JobRecord>();
-  const briefs = new Map<string, Brief>();
-
-  return {
-    findByIdempotencyKey: (key) => byKey.get(key),
-    createJob: (record, brief) => {
-      byKey.set(record.idempotencyKey, record);
-      byId.set(record.jobId, record);
-      briefs.set(record.jobId, brief);
-      return record;
-    },
-    getJob: (jobId) => byId.get(jobId),
-    orderSpentMinor: (orderId) =>
-      [...byId.values()]
-        .filter((j) => j.orderId === orderId)
-        .reduce((sum, j) => sum + j.costEstimate.amountMinor, 0),
-    daySpentMinor: () =>
-      [...byId.values()].reduce((sum, j) => sum + j.costEstimate.amountMinor, 0),
+export interface CreateOrderAndJobInput {
+  orderId: string;
+  marketplace: MarketplaceCode;
+  presetId: string;
+  productTitle: string;
+  language: 'ru' | 'en';
+  voiceover: boolean;
+  scenes: Scene[];
+  job: {
+    jobId: string;
+    /** HTTP-ключ повтора: уникальный индекс гарантирует отсутствие дубля. */
+    idempotencyKey: string;
+    status: JobStatus;
+    presetId: string;
+    promptRegistryVersion: string;
+    costEstimate: Money;
+    traceId: string;
+    billable: boolean;
   };
+}
+
+export interface CreateOrderAndJobResult {
+  /**
+   * false — гонка: тот же ключ повтора уже создал job в другом запросе.
+   * job в этом случае возвращает уже существующую запись (idempotent replay).
+   */
+  created: boolean;
+  job: JobRecord;
+}
+
+export interface JobStore {
+  findByIdempotencyKey(key: string): Promise<JobRecord | undefined>;
+  createOrderAndJob(input: CreateOrderAndJobInput): Promise<CreateOrderAndJobResult>;
+  getJob(jobId: string): Promise<JobRecord | undefined>;
+  /** Сумма платных (billable) оценок по заказу, минимальные единицы. */
+  orderSpentMinor(orderId: string): Promise<number>;
+  /** Сумма платных (billable) оценок за сегодня, минимальные единицы. */
+  daySpentMinor(): Promise<number>;
 }
