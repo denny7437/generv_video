@@ -22,7 +22,8 @@
       "@hermes/worker-qc": ["services/worker-qc/src/index.ts"],
       "@hermes/worker-import": ["services/worker-import/src/index.ts"],
       "@hermes/worker-prepare": ["services/worker-prepare/src/index.ts"],
-      "@hermes/worker-publish": ["services/worker-publish/src/index.ts"]
+      "@hermes/worker-publish": ["services/worker-publish/src/index.ts"],
+      "@hermes/worker-render": ["services/worker-render/src/index.ts"]
     }
   },
   "include": [

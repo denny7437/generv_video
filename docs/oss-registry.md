@@ -16,7 +16,7 @@
 | Очередь задач | `bullmq` | ^5.72.1 | MIT | reuse | `apps/api` (публикация в queue `script`, чтение статуса), `services/worker-assembly`, `services/worker-publish` | TEC-50, TEC-45, TEC-52 | 2026-08-18 |
 | Redis-клиент | `ioredis` | ^5.10.1 | MIT | reuse | `apps/api` (соединение BullMQ с Redis), `services/worker-assembly`, `services/worker-publish` | TEC-50, TEC-45, TEC-52 | 2026-08-18 |
 | PostgreSQL-драйвер | `pg` | ^8.23.0 | MIT | reuse | `apps/api` (репозитории заказов/jobs) | TEC-50 | 2026-08-18 |
-| Парсер YAML (конфиги) | `yaml` | ^2.9.0 | ISC | reuse | `services/worker-assembly`, `services/worker-qc` | TEC-45, TEC-46 | 2026-08-18 |
+| Парсер YAML (конфиги) | `yaml` | ^2.9.0 | ISC | reuse | `services/worker-assembly`, `services/worker-qc`, `services/worker-render` | TEC-45, TEC-46, TEC-44 | 2026-08-18 |
 | Генерация XLSX-манифеста | `exceljs` | ^4.4.0 | MIT | reuse | `services/worker-publish` | TEC-52 | 2026-08-19 |
 | ZIP-архивация выдачи | `archiver` | ^8.0.0 | MIT | reuse | `services/worker-publish` | TEC-52 | 2026-08-19 |
 

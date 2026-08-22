@@ -1,0 +1,12 @@
+{
+  "name": "@hermes/worker-render",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@hermes/budget-guard": "workspace:*",
+    "@hermes/domain": "workspace:*",
+    "yaml": "^2.9.0"
+  }
+}
