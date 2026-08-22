@@ -11,6 +11,7 @@ export default defineConfig({
       '@hermes/worker-assembly': r('./services/worker-assembly/src/index.ts'),
       '@hermes/worker-qc': r('./services/worker-qc/src/index.ts'),
       '@hermes/worker-import': r('./services/worker-import/src/index.ts'),
+      '@hermes/worker-prepare': r('./services/worker-prepare/src/index.ts'),
     },
   },
   test: {

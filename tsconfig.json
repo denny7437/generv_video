@@ -20,7 +20,8 @@
       "@hermes/budget-guard": ["packages/budget-guard/src/index.ts"],
       "@hermes/worker-assembly": ["services/worker-assembly/src/index.ts"],
       "@hermes/worker-qc": ["services/worker-qc/src/index.ts"],
-      "@hermes/worker-import": ["services/worker-import/src/index.ts"]
+      "@hermes/worker-import": ["services/worker-import/src/index.ts"],
+      "@hermes/worker-prepare": ["services/worker-prepare/src/index.ts"]
     }
   },
   "include": [
