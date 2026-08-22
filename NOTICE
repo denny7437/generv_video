@@ -29,6 +29,9 @@ bullmq (^5.72.1) — MIT License
 ioredis (^5.10.1) — MIT License
   https://github.com/redis/ioredis
 
+pg (^8.23.0) — MIT License
+  https://github.com/brianc/node-postgres
+
 yaml (^2.9.0) — ISC License
   https://github.com/eemeli/yaml
 
@@ -39,6 +42,7 @@ vitest — MIT License
 eslint, @eslint/js, typescript-eslint — MIT License
 tsx — MIT License
 @types/node — MIT License
+@types/pg — MIT License
 @sveltejs/kit — MIT License
 @sveltejs/adapter-static — MIT License
 @sveltejs/vite-plugin-svelte — MIT License
@@ -46,6 +50,7 @@ tsx — MIT License
 tailwindcss — MIT License
 svelte-check — MIT License
 vite — MIT License
+PyYAML — MIT License
 
 --- Внешние бинарные зависимости ---
 

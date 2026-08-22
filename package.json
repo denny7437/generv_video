@@ -17,14 +17,17 @@
     "check:queues": "node scripts/check-queue-schemas.mjs",
     "check:configs": "python3 scripts/check_configs.py",
     "check:compliance": "python3 tests/compliance/check_coverage.py",
+    "generate:presets": "python3 scripts/generate_presets.py",
+    "check:presets": "python3 scripts/generate_presets.py --check",
     "check:openapi": "npx --yes @redocly/cli@2.46.1 lint contracts/openapi/api.yaml",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build:web && pnpm check:oss && pnpm check:queues && pnpm check:configs && pnpm check:compliance",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build:web && pnpm check:oss && pnpm check:queues && pnpm check:configs && pnpm check:compliance && pnpm check:presets",
     "dev:infra": "docker compose -f infra/docker-compose.yml up -d",
     "dev:infra:down": "docker compose -f infra/docker-compose.yml down"
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
     "@types/node": "^20.17.0",
+    "@types/pg": "^8.23.1",
     "eslint": "^9.13.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
