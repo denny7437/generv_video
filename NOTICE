@@ -35,6 +35,12 @@ pg (^8.23.0) — MIT License
 yaml (^2.9.0) — ISC License
   https://github.com/eemeli/yaml
 
+exceljs (^4.4.0) — MIT License
+  https://github.com/exceljs/exceljs
+
+archiver (^8.0.0) — MIT License
+  https://github.com/archiverjs/node-archiver
+
 --- Инструменты разработки (в поставку не входят) ---
 
 typescript — Apache License 2.0
